@@ -1,0 +1,176 @@
+generator client {
+  provider      = "prisma-client-js"
+  // "native" for local dev/Docker; "rhel-openssl-3.0.x" is what Vercel's
+  // Node.js serverless functions run on (Amazon Linux 2) — without it,
+  // Prisma works locally but throws "query engine not found" in prod on
+  // Vercel.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  // Platform operator — manages Company tenants, belongs to none itself.
+  super_admin
+  // Scoped to exactly one Company (via User.companyId).
+  admin
+  viewer
+}
+
+model Company {
+  id           String    @id @default(cuid())
+  name         String
+  slug         String    @unique
+  createdAt    DateTime  @default(now())
+  // Set to block login for every user in this company without deleting data.
+  suspendedAt  DateTime?
+  users        User[]
+  projects     Project[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(viewer)
+  // Null only for super_admin — every admin/viewer belongs to one company.
+  companyId    String?
+  company      Company?  @relation(fields: [companyId], references: [id])
+  createdAt    DateTime  @default(now())
+  // Set once the first-login setup wizard is completed. Gates the
+  // /onboarding redirect for admins; viewers never see the wizard.
+  onboardedAt  DateTime?
+
+  @@index([companyId])
+}
+
+model Project {
+  id            String              @id @default(cuid())
+  companyId     String
+  company       Company             @relation(fields: [companyId], references: [id])
+  name          String
+  createdAt     DateTime            @default(now())
+  scans         Scan[]
+  findings      Finding[]
+  tokens        IngestToken[]
+  notifyConfig  NotificationConfig?
+
+  @@index([companyId])
+}
+
+model IngestToken {
+  id         String    @id @default(cuid())
+  projectId  String
+  project    Project   @relation(fields: [projectId], references: [id])
+  tokenHash  String    @unique
+  label      String?
+  createdAt  DateTime  @default(now())
+  revokedAt  DateTime?
+
+  @@index([projectId])
+}
+
+model Scan {
+  id             String    @id @default(cuid())
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id])
+  source         String // "trivy" | "falco"
+  repo           String?
+  pipelineId     String?
+  branch         String?
+  commitSha      String?
+  status         String // "success" | "failed" | "warning"
+  idempotencyKey String    @unique
+  createdAt      DateTime  @default(now())
+  findings       Finding[]
+  rawPayload     Json
+
+  @@index([projectId, source, createdAt])
+}
+
+model Finding {
+  id            String              @id @default(cuid())
+  scanId        String
+  scan          Scan                @relation(fields: [scanId], references: [id])
+  // Denormalized from scan.projectId — exists specifically so dedupeKey's
+  // uniqueness below can be scoped per project, not global. Without it, two
+  // different projects/companies whose Falco alerts ever produced the same
+  // content (e.g. the same fixture posted to two projects in testing) would
+  // collide: the second project's ingest would silently report the first
+  // project's finding as "already deduped" instead of creating its own.
+  projectId     String
+  project       Project             @relation(fields: [projectId], references: [id])
+  tool          String // "trivy" | "falco"
+  severity      String // "critical" | "high" | "medium" | "low" | "info"
+  title         String
+  description   String?
+  resource      String?
+  fixedVersion  String?
+  ruleName      String?
+  detectedAt    DateTime            @default(now())
+  // Dedupe key for at-least-once delivery (e.g. Falcosidekick webhook retries):
+  // alert UUID when present, else a hash of (rule, output, timestamp). Null for
+  // Trivy findings, which are deduped at the Scan level instead. Scoped to
+  // (projectId, dedupeKey) — see the projectId comment above.
+  dedupeKey     String?
+  notifications AlertNotification[]
+
+  @@unique([projectId, dedupeKey])
+  @@index([scanId])
+  @@index([severity])
+  @@index([tool, detectedAt])
+}
+
+model AlertNotification {
+  id        String   @id @default(cuid())
+  findingId String
+  finding   Finding  @relation(fields: [findingId], references: [id])
+  channel   String // "slack" | "email"
+  sentAt    DateTime @default(now())
+  status    String // "sent" | "failed"
+
+  @@index([findingId])
+}
+
+model NotificationConfig {
+  id                 String   @id @default(cuid())
+  projectId          String   @unique
+  project            Project  @relation(fields: [projectId], references: [id])
+  slackWebhookUrl    String?
+  notifyEmail        String?
+  severityThreshold  String   @default("critical") // minimum severity that triggers a notification
+  updatedAt          DateTime @updatedAt
+}
+
+// Audit trail for rejected ingestion requests (bad token, malformed body) —
+// needed to debug client pipeline misconfigurations without granting log access.
+model IngestAuditLog {
+  id         String   @id @default(cuid())
+  source     String // "trivy" | "falco"
+  projectId  String?
+  reason     String // e.g. "invalid_token" | "malformed_payload" | "rate_limited"
+  detail     String?
+  createdAt  DateTime @default(now())
+
+  @@index([source, createdAt])
+}
+
+// Audit trail for admin-driven changes within a company (tokens, team,
+// notification config, projects) — so "who changed this and when" has an
+// answer without needing server log access. Not tied by foreign key to the
+// mutated row (a revoked token, a removed teammate) since that row may no
+// longer exist by the time anyone reads the log.
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  companyId  String
+  actorEmail String
+  action     String // e.g. "token.create" | "team.remove" | "notify.update"
+  detail     String?
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, createdAt])
+}

@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: secuq
+      POSTGRES_PASSWORD: secuq
+      POSTGRES_DB: secuq
+    ports:
+      - "5432:5432"
+    volumes:
+      - secuq_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U secuq"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      # Inside the compose network the DB is reached by service name, not
+      # localhost — this intentionally differs from the host-side .env used
+      # by `npm run dev`.
+      DATABASE_URL: "postgresql://secuq:secuq@db:5432/secuq?schema=public"
+      NEXTAUTH_URL: "${NEXTAUTH_URL:-http://localhost:3000}"
+      # Insecure placeholder — override in a real deployment (e.g. an .env
+      # file passed via `env_file:`, or your host's secret manager).
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:-dev-only-insecure-secret-change-me}"
+      # No global SLACK_WEBHOOK_URL — Slack destinations are per-project,
+      # configured in Settings and stored in NotificationConfig.
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASSWORD: "${SMTP_PASSWORD:-}"
+      SMTP_FROM: "${SMTP_FROM:-ShieldSQ Alerts <alerts@shieldsq.local>}"
+      FALCO_SCAN_BUCKET_MINUTES: "${FALCO_SCAN_BUCKET_MINUTES:-60}"
+
+volumes:
+  secuq_pgdata:

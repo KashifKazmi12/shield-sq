@@ -1,0 +1,47 @@
+# Reference workflow: run Trivy against the built image and forward results to
+# ShieldSQ. Assumes GitHub Actions — swap for the equivalent steps if the actual
+# CI platform differs (see DECISIONS.md).
+name: Trivy scan -> ShieldSQ
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t sample-app:${{ github.sha }} .
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: sample-app:${{ github.sha }}
+          format: json
+          output: trivy-results.json
+          exit-code: 0 # ShieldSQ only reports; pipeline-blocking is Trivy's own --exit-code / --severity flags
+
+      - name: Forward results to ShieldSQ
+        env:
+          SHIELDSQ_URL: ${{ secrets.SHIELDSQ_INGEST_URL }} # e.g. https://shieldsq.example.com
+          SHIELDSQ_TOKEN: ${{ secrets.SHIELDSQ_INGEST_TOKEN }} # per-project token, created in ShieldSQ Settings
+        run: |
+          jq -n \
+            --arg repo "${{ github.repository }}" \
+            --arg branch "${{ github.ref_name }}" \
+            --arg commit "${{ github.sha }}" \
+            --arg pipeline "${{ github.run_id }}" \
+            --slurpfile results trivy-results.json \
+            '{meta: {repo: $repo, branch: $branch, commitSha: $commit, pipelineId: $pipeline}, results: $results[0]}' \
+            > shieldsq-payload.json
+
+          curl -sS -f -X POST "$SHIELDSQ_URL/api/ingest/trivy" \
+            -H "Authorization: Bearer $SHIELDSQ_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @shieldsq-payload.json

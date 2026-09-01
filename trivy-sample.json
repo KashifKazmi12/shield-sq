@@ -1,0 +1,136 @@
+{
+  "SchemaVersion": 2,
+  "CreatedAt": "2026-08-30T09:12:41.123456Z",
+  "ArtifactName": "registry.example.com/secuq-demo/api-service:sha-a1b2c3d",
+  "ArtifactType": "container_image",
+  "Metadata": {
+    "OS": {
+      "Family": "debian",
+      "Name": "12.6"
+    },
+    "ImageID": "sha256:8f3e1a2b9c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f",
+    "DiffIDs": [
+      "sha256:1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b"
+    ],
+    "RepoTags": [
+      "registry.example.com/secuq-demo/api-service:sha-a1b2c3d"
+    ],
+    "RepoDigests": [
+      "registry.example.com/secuq-demo/api-service@sha256:9f8e7d6c5b4a3928170695847362514039281746352819047362819473625104"
+    ],
+    "ImageConfig": {
+      "architecture": "amd64",
+      "os": "linux",
+      "created": "2026-08-30T08:55:02Z"
+    }
+  },
+  "Results": [
+    {
+      "Target": "registry.example.com/secuq-demo/api-service:sha-a1b2c3d (debian 12.6)",
+      "Class": "os-pkgs",
+      "Type": "debian",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2024-6119",
+          "PkgID": "openssl@3.0.13-1~deb12u1",
+          "PkgName": "openssl",
+          "PkgPath": "",
+          "InstalledVersion": "3.0.13-1~deb12u1",
+          "FixedVersion": "3.0.14-1~deb12u2",
+          "Layer": {
+            "DiffID": "sha256:1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b"
+          },
+          "SeveritySource": "debian",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-6119",
+          "DataSource": {
+            "ID": "debian",
+            "Name": "Debian Security Tracker",
+            "URL": "https://security-tracker.debian.org/tracker/"
+          },
+          "Title": "openssl: denial of service via crafted certificate",
+          "Description": "A crafted X.509 certificate containing a name constraint with a malformed otherName can trigger a type confusion, leading to a possible crash.",
+          "Severity": "CRITICAL",
+          "CweIDs": ["CWE-843"],
+          "CVSS": {
+            "nvd": { "V3Score": 9.1 },
+            "redhat": { "V3Score": 7.5 }
+          },
+          "References": [
+            "https://www.openssl.org/news/secadv/20240903.txt"
+          ],
+          "PublishedDate": "2024-09-03T15:15:00Z",
+          "LastModifiedDate": "2024-09-10T12:03:00Z"
+        },
+        {
+          "VulnerabilityID": "CVE-2023-52425",
+          "PkgID": "libexpat1@2.5.0-1",
+          "PkgName": "libexpat1",
+          "PkgPath": "",
+          "InstalledVersion": "2.5.0-1",
+          "FixedVersion": "2.6.0-1",
+          "Layer": {
+            "DiffID": "sha256:1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b"
+          },
+          "SeveritySource": "debian",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2023-52425",
+          "DataSource": {
+            "ID": "debian",
+            "Name": "Debian Security Tracker",
+            "URL": "https://security-tracker.debian.org/tracker/"
+          },
+          "Title": "expat: resource exhaustion via crafted XML",
+          "Description": "libexpat before 2.6.0 allows attackers to cause a denial of service via crafted XML with deeply nested entity expansion.",
+          "Severity": "HIGH",
+          "CweIDs": ["CWE-400"],
+          "CVSS": {
+            "nvd": { "V3Score": 7.5 }
+          },
+          "References": [
+            "https://github.com/libexpat/libexpat/security/advisories"
+          ],
+          "PublishedDate": "2024-02-01T10:15:00Z"
+        }
+      ]
+    },
+    {
+      "Target": "app/package-lock.json",
+      "Class": "lang-pkgs",
+      "Type": "npm",
+      "Vulnerabilities": [
+        {
+          "VulnerabilityID": "CVE-2024-4067",
+          "PkgID": "micromatch@4.0.5",
+          "PkgName": "micromatch",
+          "PkgPath": "app/package-lock.json",
+          "InstalledVersion": "4.0.5",
+          "FixedVersion": "4.0.8",
+          "Layer": {},
+          "SeveritySource": "ghsa",
+          "PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-4067",
+          "DataSource": {
+            "ID": "ghsa",
+            "Name": "GitHub Security Advisory Npm",
+            "URL": "https://github.com/advisories?query=type:reviewed+ecosystem:npm"
+          },
+          "Title": "micromatch: regular expression denial of service",
+          "Description": "Versions of micromatch before 4.0.8 are vulnerable to ReDoS via the braces function when parsing crafted glob patterns.",
+          "Severity": "MEDIUM",
+          "CweIDs": ["CWE-1333"],
+          "CVSS": {
+            "nvd": { "V3Score": 5.3 }
+          },
+          "References": [
+            "https://github.com/micromatch/micromatch/security/advisories/GHSA-952p-6rrq-rcjv"
+          ],
+          "PublishedDate": "2024-04-23T18:15:00Z"
+        }
+      ]
+    },
+    {
+      "Target": "requirements.txt",
+      "Class": "lang-pkgs",
+      "Type": "python-pkg",
+      "Vulnerabilities": null
+    }
+  ]
+}

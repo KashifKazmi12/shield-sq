@@ -1,0 +1,15 @@
+{
+  "uuid": "3f9c1a2b-7e4d-4a1e-9c2a-1234567890ab",
+  "output": "19:32:01.123456789: Warning Shell spawned in a container (user=root container_id=8f3a2b1c container_name=sample-app-6d9f pod=sample-app-6d9f8b7c5d-x2k9j ns=default proc=sh)",
+  "priority": "Warning",
+  "rule": "Terminal shell in container",
+  "time": "2026-09-01T19:32:01.123456789Z",
+  "output_fields": {
+    "container.id": "8f3a2b1c",
+    "container.name": "sample-app-6d9f",
+    "k8s.pod.name": "sample-app-6d9f8b7c5d-x2k9j",
+    "k8s.ns.name": "default",
+    "proc.name": "sh",
+    "user.name": "root"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "name": "shieldsq",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "postinstall": "prisma generate",
+    "vercel-build": "prisma generate && prisma migrate deploy && next build",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:seed-demo": "tsx prisma/seed-demo.ts",
+    "db:up": "docker compose up -d db",
+    "docker:up": "docker compose up -d --build",
+    "docker:migrate": "docker compose exec app npx prisma migrate deploy",
+    "docker:seed": "docker compose exec app npx tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.2.0",
+    "bcryptjs": "^2.4.3",
+    "next": "^16.3.4",
+    "next-auth": "^4.24.15",
+    "nodemailer": "^9.1.0",
+    "prisma": "^6.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7",
+    "tsx": "^4.19.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.14.15",
+    "@types/nodemailer": "^8.0.1",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "playwright": "^1.62.1",
+    "typescript": "^5.5.4",
+    "vitest": "^4.1.11"
+  }
+}

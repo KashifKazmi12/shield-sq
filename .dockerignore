@@ -1,0 +1,21 @@
+node_modules
+.next
+.git
+.gitignore
+npm-debug.log*
+
+# Never bake local secrets into an image layer — runtime env vars come from
+# docker-compose's `environment:`/`env_file:`, not the build context.
+.env
+.env.local
+
+*.md
+DECISIONS.md
+FEATURES.md
+GAPS.md
+
+# Dev/test-only, not needed to build or run the container.
+chromium_cli
+playwright-report
+test-results
+scripts/_*.mjs
