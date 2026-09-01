@@ -36,7 +36,7 @@ export default async function RunsPage({
 
   return (
     <div>
-      <h2 className="page-title">Pipeline Runs</h2>
+      <h2 className="page-title">Pipeline Runs — {project.name}</h2>
 
       <div className="toolbar">
         <FilterBar

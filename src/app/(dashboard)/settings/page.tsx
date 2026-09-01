@@ -4,7 +4,6 @@ import { requireCompanySession } from "@/lib/session";
 import { resolveProject } from "@/lib/current-project";
 import { listProjects } from "@/lib/queries";
 import { prisma } from "@/lib/prisma";
-import { ProjectSelect } from "@/components/ProjectSelect";
 import { TokenManager } from "./TokenManager";
 import { NotificationConfigForm } from "./NotificationConfigForm";
 import { NewProjectForm } from "./NewProjectForm";
@@ -62,15 +61,13 @@ export default async function SettingsPage({
 
   return (
     <div>
-      <div className="toolbar" style={{ justifyContent: "space-between" }}>
-        <h2 className="page-title" style={{ margin: 0 }}>Settings — {project.name}</h2>
-        <ProjectSelect projects={projects} currentId={project.id} />
-      </div>
+      <h2 className="page-title">Settings — {project.name}</h2>
 
       <div className="card section">
         <h3>Projects</h3>
         <p className="muted" style={{ marginTop: 0 }}>
           Each project gets its own ingest tokens and notification config — add one per repo or cluster.
+          Use the project menu in the top bar to switch which project Settings (and every other page) shows.
         </p>
         <table>
           <thead>

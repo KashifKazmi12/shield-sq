@@ -132,6 +132,112 @@ a:hover {
   font-size: 13px;
 }
 
+/* ---------- project switcher (header dropdown) ---------- */
+
+.project-menu {
+  position: relative;
+}
+
+.project-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+  box-shadow: none !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  cursor: pointer;
+  color: #fff !important;
+  font-weight: 500 !important;
+}
+
+.project-menu-trigger:hover {
+  background: rgba(255, 255, 255, 0.16) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.project-menu-trigger[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.18) !important;
+  border-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.project-menu-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  flex-shrink: 0;
+}
+
+.project-menu-value {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-menu-caret {
+  opacity: 0.75;
+  flex-shrink: 0;
+  transition: transform 120ms ease;
+}
+
+.project-menu-trigger[aria-expanded="true"] .project-menu-caret {
+  transform: rotate(180deg);
+}
+
+.project-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  max-width: 320px;
+  background: var(--canvas-default);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+  z-index: 70;
+  padding: 4px 0;
+}
+
+.project-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  padding: 8px 12px !important;
+  font-size: 14px;
+  font-weight: 400 !important;
+  color: var(--fg-default) !important;
+  cursor: pointer;
+}
+
+.project-menu-item:hover {
+  background: var(--canvas-subtle) !important;
+}
+
+.project-menu-item.selected {
+  background: var(--accent-subtle) !important;
+  color: var(--accent-fg) !important;
+  font-weight: 600 !important;
+}
+
+.project-menu-item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .top-header .avatar {
   width: 28px;
   height: 28px;

@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { requireCompanySession } from "@/lib/session";
 import { resolveProject } from "@/lib/current-project";
-import { listProjects, getOverviewStats, getFindingsTrend, getRecentScans } from "@/lib/queries";
-import { ProjectSelect } from "@/components/ProjectSelect";
+import { getOverviewStats, getFindingsTrend, getRecentScans } from "@/lib/queries";
 import { FilterBar } from "@/components/FilterBar";
 import { SeverityBarChart } from "@/components/charts/SeverityBarChart";
 import { SeverityTrendChart } from "@/components/charts/SeverityTrendChart";
@@ -27,7 +26,6 @@ export default async function OverviewPage({
     );
   }
 
-  const projects = await listProjects(companyId);
   const [stats, trend30, recentScans] = await Promise.all([
     getOverviewStats(project.id),
     getFindingsTrend(project.id, 30),
@@ -39,10 +37,7 @@ export default async function OverviewPage({
 
   return (
     <div>
-      <div className="toolbar" style={{ justifyContent: "space-between" }}>
-        <h2 className="page-title" style={{ margin: 0 }}>Overview</h2>
-        <ProjectSelect projects={projects} currentId={project.id} />
-      </div>
+      <h2 className="page-title">Overview — {project.name}</h2>
 
       <div className="card-grid">
         <div className="card">

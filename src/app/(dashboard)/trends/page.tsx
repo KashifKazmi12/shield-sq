@@ -27,7 +27,7 @@ export default async function TrendsPage({
 
   return (
     <div>
-      <h2 className="page-title">Trends</h2>
+      <h2 className="page-title">Trends — {project.name}</h2>
 
       <div className="toolbar">
         <FilterBar

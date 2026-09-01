@@ -2,8 +2,9 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import { ProjectSelect } from "@/components/ProjectSelect";
 import { UserMenu } from "./UserMenu";
 
 function Icon({ children }: { children: ReactNode }) {
@@ -75,7 +76,15 @@ const superAdminLinks = [
 // `undefined` on every page refresh until its own /api/auth/session round
 // trip resolves, which showed up as a "?" avatar flash before the real
 // initials could render.
-export function TopHeader({ email }: { email?: string | null }) {
+export function TopHeader({
+  email,
+  projects = [],
+  defaultProjectId,
+}: {
+  email?: string | null;
+  projects?: { id: string; name: string }[];
+  defaultProjectId?: string;
+}) {
   return (
     <header className="top-header">
       <div className="brand">
@@ -86,6 +95,9 @@ export function TopHeader({ email }: { email?: string | null }) {
         </div>
       </div>
       <div className="right">
+        {projects.length > 0 && (
+          <ProjectSelect projects={projects} defaultId={defaultProjectId} />
+        )}
         <UserMenu email={email} />
       </div>
     </header>
@@ -94,6 +106,8 @@ export function TopHeader({ email }: { email?: string | null }) {
 
 export function Sidebar({ role, companyName }: { role?: string; companyName?: string | null }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("project");
   const isSuperAdmin = role === "super_admin";
   // A viewer has nothing to configure (token/team/project/notification
   // management is admin-only, and password change now lives in the header's
@@ -108,16 +122,19 @@ export function Sidebar({ role, companyName }: { role?: string; companyName?: st
   return (
     <nav className="sidebar">
       <div className="section-label">{sectionLabel}</div>
-      {links.map((link) => (
-        <Link
-          key={link.href}
-          href={link.href}
-          className={pathname?.startsWith(link.href) ? "active" : ""}
-        >
-          {link.icon}
-          {link.label}
-        </Link>
-      ))}
+      {links.map((link) => {
+        const href = projectId ? `${link.href}?project=${encodeURIComponent(projectId)}` : link.href;
+        return (
+          <Link
+            key={link.href}
+            href={href}
+            className={pathname?.startsWith(link.href) ? "active" : ""}
+          >
+            {link.icon}
+            {link.label}
+          </Link>
+        );
+      })}
       <div className="section-label" style={{ marginTop: "auto" }}>
         Signed in as {role ?? "…"}
       </div>

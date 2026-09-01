@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { listProjects } from "@/lib/queries";
 import { TopHeader, Sidebar } from "./nav";
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
@@ -11,6 +13,8 @@ export default async function DashboardLayout({ children }: { children: ReactNod
 
   const role = session.user?.role;
   let companyName: string | null = null;
+  let projects: { id: string; name: string }[] = [];
+  let defaultProjectId: string | undefined;
 
   if (role === "admin" && session.user?.id) {
     const user = await prisma.user.findUnique({
@@ -21,8 +25,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   }
 
   if (session.user?.companyId) {
+    const companyId = session.user.companyId;
     const company = await prisma.company.findUnique({
-      where: { id: session.user.companyId },
+      where: { id: companyId },
       select: { name: true, suspendedAt: true },
     });
     // A suspension made after this JWT was issued can't be reflected in the
@@ -31,13 +36,45 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     // blocked from their *next* login.
     if (company?.suspendedAt) redirect("/login?suspended=1");
     companyName = company?.name ?? null;
+
+    const [projectList, defaultProject] = await Promise.all([
+      listProjects(companyId),
+      prisma.project.findFirst({
+        where: { companyId },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      }),
+    ]);
+    projects = projectList.map((p) => ({ id: p.id, name: p.name }));
+    defaultProjectId = defaultProject?.id;
   }
 
   return (
     <div className="app-shell">
-      <TopHeader email={session.user?.email} />
+      {/* useSearchParams in the header/sidebar needs a Suspense boundary. */}
+      <Suspense
+        fallback={
+          <header className="top-header">
+            <div />
+          </header>
+        }
+      >
+        <TopHeader
+          email={session.user?.email}
+          projects={projects}
+          defaultProjectId={defaultProjectId}
+        />
+      </Suspense>
       <div className="app-body">
-        <Sidebar role={role} companyName={companyName} />
+        <Suspense
+          fallback={
+            <nav className="sidebar">
+              <div className="section-label">{companyName ?? "Dashboards"}</div>
+            </nav>
+          }
+        >
+          <Sidebar role={role} companyName={companyName} />
+        </Suspense>
         <main className="main">{children}</main>
       </div>
     </div>

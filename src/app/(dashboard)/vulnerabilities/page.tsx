@@ -46,7 +46,7 @@ export default async function TrivyPage({
 
   return (
     <div>
-      <h2 className="page-title">Vulnerabilities</h2>
+      <h2 className="page-title">Vulnerabilities — {project.name}</h2>
 
       <div className="section card">
         <h3>Top offending images</h3>

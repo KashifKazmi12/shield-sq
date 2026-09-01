@@ -39,7 +39,7 @@ export default async function FalcoPage({
   return (
     <div>
       <div className="toolbar" style={{ justifyContent: "space-between" }}>
-        <h2 className="page-title" style={{ margin: 0 }}>Runtime Alerts</h2>
+        <h2 className="page-title" style={{ margin: 0 }}>Runtime Alerts — {project.name}</h2>
         <LiveRefreshToggle />
       </div>
 
