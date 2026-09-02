@@ -1,9 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireCompanySession } from "@/lib/session";
 import { resolveProject } from "@/lib/current-project";
 import { listProjects } from "@/lib/queries";
 import { prisma } from "@/lib/prisma";
+import { DataTable } from "@/components/DataTable";
+import { PendingLink } from "@/components/PendingLink";
 import { TokenManager } from "./TokenManager";
 import { NotificationConfigForm } from "./NotificationConfigForm";
 import { NewProjectForm } from "./NewProjectForm";
@@ -69,26 +70,26 @@ export default async function SettingsPage({
           Each project gets its own ingest tokens and notification config — add one per repo or cluster.
           Use the project menu in the top bar to switch which project Settings (and every other page) shows.
         </p>
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Created</th><th></th></tr>
-          </thead>
-          <tbody>
-            {projects.map((p) => (
-              <tr key={p.id}>
-                <td>{p.name}</td>
-                <td>{p.createdAt.toLocaleDateString()}</td>
-                <td>
-                  {p.id === project.id ? (
-                    <span className="badge badge-status-success">selected</span>
-                  ) : (
-                    <Link href={`/settings?project=${p.id}`}>Select</Link>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          columns={[
+            { id: "name", header: "Name", mobileFullWidth: true },
+            { id: "created", header: "Created" },
+            { id: "actions", header: "", mobileHideLabel: true },
+          ]}
+          rows={projects.map((p) => ({
+            key: p.id,
+            cells: [
+              p.name,
+              p.createdAt.toLocaleDateString(),
+              p.id === project.id ? (
+                <span key="sel" className="badge badge-status-success">selected</span>
+              ) : (
+                <PendingLink key="link" href={`/settings?project=${p.id}`}>Select</PendingLink>
+              ),
+            ],
+          }))}
+          emptyMessage="No projects yet."
+        />
         <div style={{ marginTop: 16 }}><NewProjectForm /></div>
       </div>
 
@@ -139,25 +140,24 @@ export default async function SettingsPage({
                   Recent admin changes to your company's tokens, team, projects, and notification
                   config.
                 </p>
-                {activity.length === 0 ? (
-                  <p className="muted">No changes recorded yet.</p>
-                ) : (
-                  <table>
-                    <thead>
-                      <tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr>
-                    </thead>
-                    <tbody>
-                      {activity.map((a) => (
-                        <tr key={a.id}>
-                          <td>{a.createdAt.toLocaleString()}</td>
-                          <td>{a.actorEmail}</td>
-                          <td>{a.action}</td>
-                          <td className="muted">{a.detail ?? ""}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
+                <DataTable
+                  columns={[
+                    { id: "when", header: "When" },
+                    { id: "who", header: "Who", mobileFullWidth: true },
+                    { id: "action", header: "Action" },
+                    { id: "detail", header: "Detail", mobileFullWidth: true },
+                  ]}
+                  rows={activity.map((a) => ({
+                    key: a.id,
+                    cells: [
+                      a.createdAt.toLocaleString(),
+                      a.actorEmail,
+                      a.action,
+                      <span key="d" className="muted">{a.detail ?? ""}</span>,
+                    ],
+                  }))}
+                  emptyMessage="No changes recorded yet."
+                />
               </div>
             ),
           },

@@ -4,6 +4,7 @@ import { resolveProject } from "@/lib/current-project";
 import { listPipelineRuns } from "@/lib/queries";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { DataTable } from "@/components/DataTable";
 import { FilterBar } from "@/components/FilterBar";
 import { Pagination } from "@/components/Pagination";
 import { StatusBadge } from "@/components/SeverityBadge";
@@ -59,35 +60,30 @@ export default async function RunsPage({
         />
       </div>
 
-      <table>
-        <thead>
-          <tr>
-            <th>Repo</th>
-            <th>Branch</th>
-            <th>Commit</th>
-            <th>Pipeline</th>
-            <th>Status</th>
-            <th>Findings</th>
-            <th>When</th>
-          </tr>
-        </thead>
-        <tbody>
-          {runs.map((run) => (
-            <tr key={run.id}>
-              <td><Link href={`/runs/${run.id}`}>{run.repo ?? run.id}</Link></td>
-              <td>{run.branch ?? "—"}</td>
-              <td>{run.commitSha?.slice(0, 7) ?? "—"}</td>
-              <td>{run.pipelineId ?? "—"}</td>
-              <td><StatusBadge status={run.status} /></td>
-              <td>{run._count.findings}</td>
-              <td>{run.createdAt.toLocaleString()}</td>
-            </tr>
-          ))}
-          {runs.length === 0 && (
-            <tr><td colSpan={7} className="muted">No pipeline runs match these filters.</td></tr>
-          )}
-        </tbody>
-      </table>
+      <DataTable
+        columns={[
+          { id: "repo", header: "Repo", mobileFullWidth: true },
+          { id: "branch", header: "Branch" },
+          { id: "commit", header: "Commit" },
+          { id: "pipeline", header: "Pipeline" },
+          { id: "status", header: "Status" },
+          { id: "findings", header: "Findings" },
+          { id: "when", header: "When", mobileFullWidth: true },
+        ]}
+        rows={runs.map((run) => ({
+          key: run.id,
+          cells: [
+            <Link key="r" href={`/runs/${run.id}`}>{run.repo ?? run.id}</Link>,
+            run.branch ?? "—",
+            run.commitSha?.slice(0, 7) ?? "—",
+            run.pipelineId ?? "—",
+            <StatusBadge key="st" status={run.status} />,
+            run._count.findings,
+            run.createdAt.toLocaleString(),
+          ],
+        }))}
+        emptyMessage="No pipeline runs match these filters."
+      />
       <Pagination nextCursor={nextCursor} pageCount={runs.length} total={total} take={DEFAULT_PAGE_SIZE} />
     </div>
   );

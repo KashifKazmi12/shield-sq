@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { requireCompanySession } from "@/lib/session";
 import { getScanWithFindings } from "@/lib/queries";
 import { severityRank } from "@/lib/severity";
+import { DataTable } from "@/components/DataTable";
 import { SeverityBadge, StatusBadge } from "@/components/SeverityBadge";
 
 // Next 16: page-level params is a Promise (Async Request APIs).
@@ -40,26 +41,24 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
 
       <div className="card">
         <h3>Findings ({findings.length})</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Severity</th>
-              <th>Resource</th>
-              <th>Fixed version</th>
-            </tr>
-          </thead>
-          <tbody>
-            {findings.map((f) => (
-              <tr key={f.id}>
-                <td>{f.title}</td>
-                <td><SeverityBadge severity={f.severity} /></td>
-                <td>{f.resource ?? "—"}</td>
-                <td>{f.fixedVersion ?? <span className="muted">unfixed</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <DataTable
+          columns={[
+            { id: "title", header: "Title", mobileFullWidth: true },
+            { id: "severity", header: "Severity" },
+            { id: "resource", header: "Resource", mobileFullWidth: true },
+            { id: "fixed", header: "Fixed version" },
+          ]}
+          rows={findings.map((f) => ({
+            key: f.id,
+            cells: [
+              f.title,
+              <SeverityBadge key="sev" severity={f.severity} />,
+              f.resource ?? "—",
+              f.fixedVersion ?? <span className="muted">unfixed</span>,
+            ],
+          }))}
+          emptyMessage="No findings on this run."
+        />
       </div>
     </div>
   );

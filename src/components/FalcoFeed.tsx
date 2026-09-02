@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo } from "react";
+import { DataTable, type DataTableColumn } from "./DataTable";
 import { SeverityBadge } from "./SeverityBadge";
 
 type FalcoFinding = {
@@ -12,35 +14,37 @@ type FalcoFinding = {
   detectedAt: Date | string;
 };
 
+const columns: DataTableColumn[] = [
+  { id: "time", header: "Time" },
+  { id: "severity", header: "Severity" },
+  { id: "rule", header: "Rule", mobileFullWidth: true },
+  { id: "resource", header: "Host / pod", mobileFullWidth: true },
+  { id: "detail", header: "Detail", mobileFullWidth: true },
+];
+
 export function FalcoFeed({ findings }: { findings: FalcoFinding[] }) {
-  if (findings.length === 0) {
-    return <p className="muted">No runtime alerts match these filters.</p>;
-  }
+  const rows = useMemo(
+    () =>
+      findings.map((f) => ({
+        key: f.id,
+        cells: [
+          new Date(f.detectedAt).toLocaleString(),
+          <SeverityBadge key="sev" severity={f.severity} />,
+          f.ruleName ?? f.title,
+          f.resource ?? "—",
+          <span key="d" className="muted">{f.description ?? "—"}</span>,
+        ],
+      })),
+    [findings]
+  );
 
   return (
-    <div className="card" style={{ padding: 0 }}>
-      <table>
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Severity</th>
-            <th>Rule</th>
-            <th>Host / pod</th>
-            <th>Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          {findings.map((f) => (
-            <tr key={f.id}>
-              <td>{new Date(f.detectedAt).toLocaleString()}</td>
-              <td><SeverityBadge severity={f.severity} /></td>
-              <td>{f.ruleName ?? f.title}</td>
-              <td>{f.resource ?? "—"}</td>
-              <td className="muted">{f.description ?? "—"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="card" style={{ padding: 12 }}>
+      <DataTable
+        columns={columns}
+        rows={rows}
+        emptyMessage="No runtime alerts match these filters."
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { DataTable } from "@/components/DataTable";
 import { createIngestToken, revokeIngestToken } from "./actions";
 
 type Token = {
@@ -49,30 +50,28 @@ export function TokenManager({ projectId, tokens }: { projectId: string; tokens:
         <button onClick={handleCreate} disabled={isPending}>Create token</button>
       </div>
 
-      <table>
-        <thead>
-          <tr><th>Label</th><th>Created</th><th>Status</th><th></th></tr>
-        </thead>
-        <tbody>
-          {tokens.map((t) => (
-            <tr key={t.id}>
-              <td>{t.label ?? "—"}</td>
-              <td>{new Date(t.createdAt).toLocaleString()}</td>
-              <td>{t.revokedAt ? "revoked" : "active"}</td>
-              <td>
-                {!t.revokedAt && (
-                  <button className="danger" onClick={() => handleRevoke(t.id)} disabled={isPending}>
-                    Revoke
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-          {tokens.length === 0 && (
-            <tr><td colSpan={4} className="muted">No tokens yet.</td></tr>
-          )}
-        </tbody>
-      </table>
+      <DataTable
+        columns={[
+          { id: "label", header: "Label" },
+          { id: "created", header: "Created", mobileFullWidth: true },
+          { id: "status", header: "Status" },
+          { id: "actions", header: "", mobileFullWidth: true, mobileHideLabel: true },
+        ]}
+        rows={tokens.map((t) => ({
+          key: t.id,
+          cells: [
+            t.label ?? "—",
+            new Date(t.createdAt).toLocaleString(),
+            t.revokedAt ? "revoked" : "active",
+            !t.revokedAt ? (
+              <button key="r" className="danger" onClick={() => handleRevoke(t.id)} disabled={isPending}>
+                Revoke
+              </button>
+            ) : null,
+          ],
+        }))}
+        emptyMessage="No tokens yet."
+      />
     </div>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePendingRouter } from "@/components/NavigationPending";
 
 export function ProjectSelect({
   projects,
@@ -15,6 +16,7 @@ export function ProjectSelect({
   defaultId?: string;
 }) {
   const router = useRouter();
+  const { push, isPending } = usePendingRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -37,6 +39,8 @@ export function ProjectSelect({
     if (!projects.some((p) => p.id === defaultId)) return;
     const params = new URLSearchParams(searchParams.toString());
     params.set("project", defaultId);
+    // Initial URL sync — use the bare router so first paint doesn't flash
+    // the pending skeleton overlay.
     router.replace(`${pathname}?${params.toString()}`);
   }, [defaultId, pathname, projects, router, searchParams]);
 
@@ -60,7 +64,7 @@ export function ProjectSelect({
 
   function onChange(id: string) {
     setOpen(false);
-    if (id === selectedId) return;
+    if (id === selectedId || isPending) return;
     const params = new URLSearchParams(searchParams.toString());
     params.set("project", id);
     // A cursor (or pagination history) from the previous project's result
@@ -69,19 +73,21 @@ export function ProjectSelect({
     // instead of correctly starting from page 1.
     params.delete("cursor");
     params.delete("prevCursors");
-    router.push(`${pathname}?${params.toString()}`);
+    push(`${pathname}?${params.toString()}`);
   }
 
   if (projects.length <= 1 || !selected) return null;
 
   return (
-    <div className="project-menu" ref={menuRef}>
+    <div className={`project-menu${isPending ? " is-pending" : ""}`} ref={menuRef}>
       <button
         type="button"
         className="project-menu-trigger"
         aria-label="Project"
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-busy={isPending}
+        disabled={isPending}
         onClick={() => setOpen((v) => !v)}
       >
         <span className="project-menu-label">Project</span>

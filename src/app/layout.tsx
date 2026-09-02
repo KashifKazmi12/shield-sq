@@ -7,6 +7,11 @@ export const metadata = {
   description: "Unified security dashboard for Trivy scans and Falco runtime alerts",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">

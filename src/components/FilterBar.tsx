@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { usePendingRouter } from "@/components/NavigationPending";
 
 export type FilterField = {
   name: string;
@@ -9,7 +10,7 @@ export type FilterField = {
 };
 
 export function FilterBar({ fields }: { fields: FilterField[] }) {
-  const router = useRouter();
+  const { push, isPending } = usePendingRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -22,7 +23,7 @@ export function FilterBar({ fields }: { fields: FilterField[] }) {
     // filtered rows underneath it have changed.
     params.delete("cursor");
     params.delete("prevCursors");
-    router.push(`${pathname}?${params.toString()}`);
+    push(`${pathname}?${params.toString()}`);
   }
 
   // No wrapping div here — the caller places FilterBar inside its own
@@ -35,6 +36,7 @@ export function FilterBar({ fields }: { fields: FilterField[] }) {
         <select
           key={field.name}
           value={searchParams.get(field.name) ?? ""}
+          disabled={isPending}
           onChange={(e) => onChange(field.name, e.target.value)}
         >
           <option value="">{field.label}: All</option>

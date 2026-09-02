@@ -3,6 +3,7 @@ import { resolveProject } from "@/lib/current-project";
 import { listTrivyFindings, getTopOffendingImages } from "@/lib/queries";
 import { prisma } from "@/lib/prisma";
 import { SEVERITIES, DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { DataTable } from "@/components/DataTable";
 import { FilterBar } from "@/components/FilterBar";
 import { TextFilter } from "@/components/TextFilter";
 import { Pagination } from "@/components/Pagination";
@@ -50,23 +51,17 @@ export default async function TrivyPage({
 
       <div className="section card">
         <h3>Top offending images</h3>
-        {topImages.length === 0 ? (
-          <p className="muted">No data yet.</p>
-        ) : (
-          <table>
-            <thead>
-              <tr><th>Image / target</th><th>Findings</th></tr>
-            </thead>
-            <tbody>
-              {topImages.map((row) => (
-                <tr key={row.resource}>
-                  <td>{row.resource}</td>
-                  <td>{row.count}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <DataTable
+          columns={[
+            { id: "image", header: "Image / target", mobileFullWidth: true },
+            { id: "count", header: "Findings" },
+          ]}
+          rows={topImages.map((row) => ({
+            key: row.resource ?? "unknown",
+            cells: [row.resource, row.count],
+          }))}
+          emptyMessage="No data yet."
+        />
       </div>
 
       <div className="toolbar">

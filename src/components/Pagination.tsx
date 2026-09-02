@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { usePendingRouter } from "@/components/NavigationPending";
 
 const CURSOR_PARAM = "cursor";
 const HISTORY_PARAM = "prevCursors";
@@ -24,7 +25,7 @@ type Props = {
 // Previous/First survive a shared link or a refresh, unlike relying on the
 // browser's own back button.
 export function Pagination({ nextCursor, pageCount, total, take }: Props) {
-  const router = useRouter();
+  const { push, isPending } = usePendingRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -44,7 +45,7 @@ export function Pagination({ nextCursor, pageCount, total, take }: Props) {
     else params.delete(CURSOR_PARAM);
     if (newHistory.length) params.set(HISTORY_PARAM, newHistory.join(","));
     else params.delete(HISTORY_PARAM);
-    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    push(`${pathname}?${params.toString()}`, { scroll: false });
   }
 
   function goFirst() {
@@ -73,7 +74,7 @@ export function Pagination({ nextCursor, pageCount, total, take }: Props) {
           type="button"
           className="secondary pagination-btn"
           onClick={goFirst}
-          disabled={!hasPrev}
+          disabled={!hasPrev || isPending}
           aria-label="First page"
           title="First page"
         >
@@ -83,7 +84,7 @@ export function Pagination({ nextCursor, pageCount, total, take }: Props) {
           type="button"
           className="secondary pagination-btn"
           onClick={goPrev}
-          disabled={!hasPrev}
+          disabled={!hasPrev || isPending}
           aria-label="Previous page"
         >
           ‹ Prev
@@ -95,7 +96,7 @@ export function Pagination({ nextCursor, pageCount, total, take }: Props) {
           type="button"
           className="pagination-btn"
           onClick={goNext}
-          disabled={!nextCursor}
+          disabled={!nextCursor || isPending}
           aria-label="Next page"
         >
           Next ›

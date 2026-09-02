@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireCompanySession } from "@/lib/session";
 import { resolveProject } from "@/lib/current-project";
 import { getOverviewStats, getFindingsTrend, getRecentScans } from "@/lib/queries";
+import { DataTable } from "@/components/DataTable";
 import { FilterBar } from "@/components/FilterBar";
 import { SeverityBarChart } from "@/components/charts/SeverityBarChart";
 import { SeverityTrendChart } from "@/components/charts/SeverityTrendChart";
@@ -95,33 +96,26 @@ export default async function OverviewPage({
           />
         </div>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Source</th>
-              <th>Repo</th>
-              <th>Status</th>
-              <th>Findings</th>
-              <th>When</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentScans.map((scan) => (
-              <tr key={scan.id}>
-                <td>{scan.source}</td>
-                <td>{scan.repo ?? "—"}</td>
-                <td><StatusBadge status={scan.status} /></td>
-                <td>
-                  <Link href={`/runs/${scan.id}`}>{scan._count.findings}</Link>
-                </td>
-                <td>{scan.createdAt.toLocaleString()}</td>
-              </tr>
-            ))}
-            {recentScans.length === 0 && (
-              <tr><td colSpan={5} className="muted">No activity matches these filters.</td></tr>
-            )}
-          </tbody>
-        </table>
+        <DataTable
+          columns={[
+            { id: "source", header: "Source" },
+            { id: "repo", header: "Repo", mobileFullWidth: true },
+            { id: "status", header: "Status" },
+            { id: "findings", header: "Findings" },
+            { id: "when", header: "When", mobileFullWidth: true },
+          ]}
+          rows={recentScans.map((scan) => ({
+            key: scan.id,
+            cells: [
+              scan.source,
+              scan.repo ?? "—",
+              <StatusBadge key="st" status={scan.status} />,
+              <Link key="f" href={`/runs/${scan.id}`}>{scan._count.findings}</Link>,
+              scan.createdAt.toLocaleString(),
+            ],
+          }))}
+          emptyMessage="No activity matches these filters."
+        />
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { listProjects } from "@/lib/queries";
-import { TopHeader, Sidebar } from "./nav";
+import { DashboardShell } from "./nav";
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const session = await getServerSession(authOptions);
@@ -54,29 +54,29 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       {/* useSearchParams in the header/sidebar needs a Suspense boundary. */}
       <Suspense
         fallback={
-          <header className="top-header">
-            <div />
-          </header>
+          <>
+            <header className="top-header">
+              <div />
+            </header>
+            <div className="app-body">
+              <nav className="sidebar">
+                <div className="section-label">{companyName ?? "Dashboards"}</div>
+              </nav>
+              <main className="main">{children}</main>
+            </div>
+          </>
         }
       >
-        <TopHeader
+        <DashboardShell
           email={session.user?.email}
           projects={projects}
           defaultProjectId={defaultProjectId}
-        />
-      </Suspense>
-      <div className="app-body">
-        <Suspense
-          fallback={
-            <nav className="sidebar">
-              <div className="section-label">{companyName ?? "Dashboards"}</div>
-            </nav>
-          }
+          role={role}
+          companyName={companyName}
         >
-          <Sidebar role={role} companyName={companyName} />
-        </Suspense>
-        <main className="main">{children}</main>
-      </div>
+          {children}
+        </DashboardShell>
+      </Suspense>
     </div>
   );
 }

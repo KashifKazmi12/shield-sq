@@ -11,8 +11,8 @@ type Step = "details" | "configure";
 
 function CodeRow({ value }: { value: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-      <pre style={{ flex: 1, margin: 0, wordBreak: "break-all", whiteSpace: "pre-wrap" }}>{value}</pre>
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+      <pre style={{ flex: "1 1 220px", margin: 0, minWidth: 0, wordBreak: "break-all", whiteSpace: "pre-wrap" }}>{value}</pre>
       <CopyButton value={value} />
     </div>
   );

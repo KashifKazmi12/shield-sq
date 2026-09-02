@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { createCompany, suspendCompany, reactivateCompany, resetCompanyAdminPassword } from "./actions";
+import { DataTable } from "@/components/DataTable";
 import { CopyButton } from "@/components/CopyButton";
+import { createCompany, suspendCompany, reactivateCompany, resetCompanyAdminPassword } from "./actions";
 
 type Company = {
   id: string;
@@ -158,54 +159,46 @@ export function CompanyManager({ companies }: { companies: Company[] }) {
             <option value="suspended">Suspended</option>
           </select>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Users</th>
-              <th>Projects</th>
-              <th>Created</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredCompanies.map((c) => (
-              <tr key={c.id}>
-                <td>{c.name}</td>
-                <td>{c._count.users}</td>
-                <td>{c._count.projects}</td>
-                <td>{new Date(c.createdAt).toLocaleDateString()}</td>
-                <td>
-                  <span className={`badge ${c.suspendedAt ? "badge-status-failed" : "badge-status-success"}`}>
-                    {c.suspendedAt ? "suspended" : "active"}
-                  </span>
-                </td>
-                <td>
-                  <div className="toolbar" style={{ margin: 0 }}>
-                    {c.suspendedAt ? (
-                      <button className="secondary" onClick={() => handleReactivate(c.id)} disabled={isPending}>
-                        Reactivate
-                      </button>
-                    ) : (
-                      <button className="danger" onClick={() => handleSuspend(c.id)} disabled={isPending}>
-                        Suspend
-                      </button>
-                    )}
-                    <button className="secondary" onClick={() => handleResetPassword(c.id)} disabled={isPending}>
-                      Reset password
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filteredCompanies.length === 0 && (
-              <tr><td colSpan={6} className="muted">
-                {companies.length === 0 ? "No companies yet." : "No companies match these filters."}
-              </td></tr>
-            )}
-          </tbody>
-        </table>
+        <DataTable
+          columns={[
+            { id: "name", header: "Name", mobileFullWidth: true },
+            { id: "users", header: "Users" },
+            { id: "projects", header: "Projects" },
+            { id: "created", header: "Created" },
+            { id: "status", header: "Status" },
+            { id: "actions", header: "", mobileFullWidth: true, mobileHideLabel: true },
+          ]}
+          rows={filteredCompanies.map((c) => ({
+            key: c.id,
+            cells: [
+              c.name,
+              c._count.users,
+              c._count.projects,
+              new Date(c.createdAt).toLocaleDateString(),
+              <span
+                key="st"
+                className={`badge ${c.suspendedAt ? "badge-status-failed" : "badge-status-success"}`}
+              >
+                {c.suspendedAt ? "suspended" : "active"}
+              </span>,
+              <div key="actions" className="toolbar" style={{ margin: 0 }}>
+                {c.suspendedAt ? (
+                  <button className="secondary" onClick={() => handleReactivate(c.id)} disabled={isPending}>
+                    Reactivate
+                  </button>
+                ) : (
+                  <button className="danger" onClick={() => handleSuspend(c.id)} disabled={isPending}>
+                    Suspend
+                  </button>
+                )}
+                <button className="secondary" onClick={() => handleResetPassword(c.id)} disabled={isPending}>
+                  Reset password
+                </button>
+              </div>,
+            ],
+          }))}
+          emptyMessage={companies.length === 0 ? "No companies yet." : "No companies match these filters."}
+        />
       </div>
     </div>
   );

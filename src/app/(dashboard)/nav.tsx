@@ -1,9 +1,14 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Logo } from "@/components/Logo";
+import {
+  NavigationPendingProvider,
+  NavigationPendingUI,
+  usePendingRouter,
+} from "@/components/NavigationPending";
 import { ProjectSelect } from "@/components/ProjectSelect";
 import { UserMenu } from "./UserMenu";
 
@@ -70,6 +75,89 @@ const superAdminLinks = [
   },
 ];
 
+function MenuIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M1.75 3.5a.75.75 0 0 1 .75-.75h11a.75.75 0 0 1 0 1.5h-11a.75.75 0 0 1-.75-.75Zm0 4.5a.75.75 0 0 1 .75-.75h11a.75.75 0 0 1 0 1.5h-11A.75.75 0 0 1 1.75 8Zm0 4.5a.75.75 0 0 1 .75-.75h11a.75.75 0 0 1 0 1.5h-11a.75.75 0 0 1-.75-.75Z" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M3.72 3.72a.75.75 0 0 1 1.06 0L8 6.94l3.22-3.22a.749.749 0 0 1 1.275.326.749.749 0 0 1-.215.734L9.06 8l3.22 3.22a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215L8 9.06l-3.22 3.22a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042L6.94 8 3.72 4.78a.75.75 0 0 1 0-1.06Z" />
+    </svg>
+  );
+}
+
+export function DashboardShell({
+  email,
+  projects = [],
+  defaultProjectId,
+  role,
+  companyName,
+  children,
+}: {
+  email?: string | null;
+  projects?: { id: string; name: string }[];
+  defaultProjectId?: string;
+  role?: string;
+  companyName?: string | null;
+  children: ReactNode;
+}) {
+  const [navOpen, setNavOpen] = useState(false);
+  const pathname = usePathname();
+
+  // Close the drawer after navigation so mobile users land on the page, not
+  // with the menu still covering it.
+  useEffect(() => {
+    setNavOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNavOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [navOpen]);
+
+  return (
+    <NavigationPendingProvider>
+      <TopHeader
+        email={email}
+        projects={projects}
+        defaultProjectId={defaultProjectId}
+        onMenuClick={() => setNavOpen(true)}
+      />
+      <div className="app-body">
+        <div
+          className={`sidebar-backdrop${navOpen ? " open" : ""}`}
+          onClick={() => setNavOpen(false)}
+          aria-hidden={!navOpen}
+        />
+        <Sidebar
+          role={role}
+          companyName={companyName}
+          open={navOpen}
+          onClose={() => setNavOpen(false)}
+        />
+        <main className="main">
+          {children}
+          <NavigationPendingUI />
+        </main>
+      </div>
+    </NavigationPendingProvider>
+  );
+}
+
 // Takes the signed-in user's email as a prop from the server-rendered
 // layout (which already has the session via getServerSession) rather than
 // re-fetching it client-side with useSession() — that hook starts out
@@ -80,14 +168,24 @@ export function TopHeader({
   email,
   projects = [],
   defaultProjectId,
+  onMenuClick,
 }: {
   email?: string | null;
   projects?: { id: string; name: string }[];
   defaultProjectId?: string;
+  onMenuClick?: () => void;
 }) {
   return (
     <header className="top-header">
       <div className="brand">
+        <button
+          type="button"
+          className="nav-menu-btn"
+          aria-label="Open navigation"
+          onClick={onMenuClick}
+        >
+          <MenuIcon />
+        </button>
         <Logo size={34} />
         <div className="brand-text">
           <span className="brand-name">ShieldSQ</span>
@@ -104,9 +202,20 @@ export function TopHeader({
   );
 }
 
-export function Sidebar({ role, companyName }: { role?: string; companyName?: string | null }) {
+export function Sidebar({
+  role,
+  companyName,
+  open = false,
+  onClose,
+}: {
+  role?: string;
+  companyName?: string | null;
+  open?: boolean;
+  onClose?: () => void;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { push } = usePendingRouter();
   const projectId = searchParams.get("project");
   const isSuperAdmin = role === "super_admin";
   // A viewer has nothing to configure (token/team/project/notification
@@ -120,8 +229,21 @@ export function Sidebar({ role, companyName }: { role?: string; companyName?: st
   const sectionLabel = isSuperAdmin ? "Platform" : companyName ?? "Dashboards";
 
   return (
-    <nav className="sidebar">
-      <div className="section-label">{sectionLabel}</div>
+    <nav className={`sidebar${open ? " open" : ""}`} aria-label="Main">
+      <div className="sidebar-mobile-header">
+        <div className="section-label" style={{ paddingTop: 0, paddingBottom: 0 }}>
+          {sectionLabel}
+        </div>
+        <button
+          type="button"
+          className="sidebar-close-btn"
+          aria-label="Close navigation"
+          onClick={onClose}
+        >
+          <CloseIcon />
+        </button>
+      </div>
+      <div className="section-label sidebar-desktop-label">{sectionLabel}</div>
       {links.map((link) => {
         const href = projectId ? `${link.href}?project=${encodeURIComponent(projectId)}` : link.href;
         return (
@@ -129,6 +251,11 @@ export function Sidebar({ role, companyName }: { role?: string; companyName?: st
             key={link.href}
             href={href}
             className={pathname?.startsWith(link.href) ? "active" : ""}
+            onClick={(e) => {
+              e.preventDefault();
+              onClose?.();
+              push(href);
+            }}
           >
             {link.icon}
             {link.label}
