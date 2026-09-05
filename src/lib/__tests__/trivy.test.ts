@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   parseTrivyPayload,
   trivyIdempotencyKey,
+  trivyFindingDedupeKey,
   extractTrivyFindings,
   TrivyPayloadError,
 } from "../trivy";
@@ -88,6 +89,23 @@ describe("trivyIdempotencyKey", () => {
   });
 });
 
+describe("trivyFindingDedupeKey", () => {
+  it("is stable for the same CVE + package + target", () => {
+    expect(trivyFindingDedupeKey("CVE-1", "openssl", "app:latest")).toBe(
+      trivyFindingDedupeKey("CVE-1", "openssl", "app:latest")
+    );
+  });
+
+  it("differs when package or target differs", () => {
+    expect(trivyFindingDedupeKey("CVE-1", "openssl", "a")).not.toBe(
+      trivyFindingDedupeKey("CVE-1", "libc", "a")
+    );
+    expect(trivyFindingDedupeKey("CVE-1", "openssl", "a")).not.toBe(
+      trivyFindingDedupeKey("CVE-1", "openssl", "b")
+    );
+  });
+});
+
 describe("extractTrivyFindings", () => {
   it("flattens vulnerabilities across all results and normalizes severity", () => {
     const parsed = parseTrivyPayload(rawTrivyReport);
@@ -98,8 +116,13 @@ describe("extractTrivyFindings", () => {
       title: "CVE-1 in openssl",
       fixedVersion: "1.2.3",
       resource: "sample:latest (alpine)",
+      dedupeKey: "trivy:CVE-1:openssl:sample:latest (alpine)",
     });
-    expect(findings[1]).toMatchObject({ severity: "low", fixedVersion: null });
+    expect(findings[1]).toMatchObject({
+      severity: "low",
+      fixedVersion: null,
+      dedupeKey: "trivy:CVE-2:libc:sample:latest (alpine)",
+    });
   });
 
   it("returns an empty array for a report with no vulnerabilities", () => {

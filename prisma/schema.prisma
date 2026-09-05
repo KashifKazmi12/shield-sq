@@ -112,10 +112,15 @@ model Finding {
   fixedVersion  String?
   ruleName      String?
   detectedAt    DateTime            @default(now())
-  // Dedupe key for at-least-once delivery (e.g. Falcosidekick webhook retries):
-  // alert UUID when present, else a hash of (rule, output, timestamp). Null for
-  // Trivy findings, which are deduped at the Scan level instead. Scoped to
-  // (projectId, dedupeKey) — see the projectId comment above.
+  // opened | resolved | reopened — Trivy lifecycle (Falco stays opened for now).
+  status        String              @default("opened")
+  // Periods the finding was actively open. Lifetime = sum of these intervals
+  // (resolved gaps do not count). Shape: [{ start: ISO, end: ISO | null }].
+  openIntervals Json                @default("[]")
+  // Dedupe key scoped to (projectId, dedupeKey) — see the projectId comment
+  // above. Falco: alert UUID when present, else a hash of (rule, output,
+  // timestamp). Trivy: stable key of (CVE, package, target) so a later CI
+  // run that reports the same vuln does not insert a duplicate Finding.
   dedupeKey     String?
   notifications AlertNotification[]
 
@@ -123,6 +128,7 @@ model Finding {
   @@index([scanId])
   @@index([severity])
   @@index([tool, detectedAt])
+  @@index([projectId, tool, status])
 }
 
 model AlertNotification {

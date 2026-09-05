@@ -1,9 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DataTable, type DataTableColumn } from "./DataTable";
 import { Drawer } from "./Drawer";
-import { SeverityBadge } from "./SeverityBadge";
+import { FindingStatusBadge, SeverityBadge } from "./SeverityBadge";
+import {
+  formatFindingLifetime,
+  lifecycleEventsFromIntervals,
+  parseOpenIntervals,
+} from "@/lib/finding-lifecycle";
 
 type TrivyFinding = {
   id: string;
@@ -13,6 +18,8 @@ type TrivyFinding = {
   severity: string;
   fixedVersion: string | null;
   detectedAt: Date | string;
+  status: string;
+  openIntervals: unknown;
   scan: {
     repo: string | null;
     branch: string | null;
@@ -25,15 +32,30 @@ type TrivyFinding = {
 const columns: DataTableColumn[] = [
   { id: "cve", header: "CVE", mobileFullWidth: true },
   { id: "severity", header: "Severity" },
+  { id: "status", header: "Status" },
+  { id: "lifetime", header: "Lifetime" },
   { id: "resource", header: "Image / target", mobileFullWidth: true },
   { id: "repo", header: "Repo" },
   { id: "fix", header: "Fix available" },
   { id: "detected", header: "Detected" },
 ];
 
+function formatEventLabel(type: string) {
+  if (type === "reopened") return "Reopened";
+  if (type === "resolved") return "Resolved";
+  return "Opened";
+}
+
 export function TrivyFindingsTable({ findings }: { findings: TrivyFinding[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
   const selected = findings.find((f) => f.id === selectedId) ?? null;
+
+  // Refresh lifetime labels about once a minute (we never show seconds).
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const rows = useMemo(
     () =>
@@ -42,14 +64,20 @@ export function TrivyFindingsTable({ findings }: { findings: TrivyFinding[] }) {
         cells: [
           f.title,
           <SeverityBadge key="sev" severity={f.severity} />,
+          <FindingStatusBadge key="st" status={f.status} />,
+          formatFindingLifetime(f.openIntervals, now),
           f.resource ?? "—",
           f.scan.repo ?? "—",
           f.fixedVersion ?? <span className="muted">unfixed</span>,
           new Date(f.detectedAt).toLocaleString(),
         ],
       })),
-    [findings]
+    [findings, now]
   );
+
+  const timeline = selected
+    ? lifecycleEventsFromIntervals(parseOpenIntervals(selected.openIntervals))
+    : [];
 
   return (
     <>
@@ -67,13 +95,16 @@ export function TrivyFindingsTable({ findings }: { findings: TrivyFinding[] }) {
       >
         {selected && (
           <>
-            <div className="drawer-meta">
+            <div className="drawer-meta" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <SeverityBadge severity={selected.severity} />
+              <FindingStatusBadge status={selected.status} />
             </div>
             <p className="drawer-prose">
               {selected.description ?? "No description provided."}
             </p>
             <dl className="drawer-dl">
+              <dt>Lifetime</dt>
+              <dd>{formatFindingLifetime(selected.openIntervals, now)}</dd>
               <dt>Target</dt>
               <dd>{selected.resource ?? "—"}</dd>
               <dt>Fixed version</dt>
@@ -86,9 +117,28 @@ export function TrivyFindingsTable({ findings }: { findings: TrivyFinding[] }) {
               <dd>{selected.scan.commitSha ?? "—"}</dd>
               <dt>Pipeline</dt>
               <dd>{selected.scan.pipelineId ?? "—"}</dd>
-              <dt>Detected</dt>
+              <dt>First detected</dt>
               <dd>{new Date(selected.detectedAt).toLocaleString()}</dd>
             </dl>
+
+            <h4 style={{ margin: "20px 0 8px", fontSize: 13, fontWeight: 600 }}>History</h4>
+            {timeline.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>No lifecycle history yet.</p>
+            ) : (
+              <ul className="finding-timeline">
+                {timeline.map((event, i) => (
+                  <li key={`${event.type}-${event.at}-${i}`}>
+                    <span className={`finding-timeline-dot finding-timeline-${event.type}`} />
+                    <div>
+                      <strong>{formatEventLabel(event.type)}</strong>
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        {new Date(event.at).toLocaleString()}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </>
         )}
       </Drawer>

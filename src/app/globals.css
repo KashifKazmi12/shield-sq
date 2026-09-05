@@ -578,6 +578,38 @@ tbody tr:last-child td {
 .badge-status-warning { color: var(--attention-fg); background: var(--attention-subtle); border-color: #f0dc82; }
 .badge-status-failed  { color: var(--danger-fg); background: var(--danger-subtle); border-color: #ffcecb; }
 
+.badge-finding-opened   { color: var(--accent-fg); background: var(--accent-subtle); border-color: #b6e3ff; }
+.badge-finding-reopened { color: var(--attention-fg); background: var(--attention-subtle); border-color: #f0dc82; }
+.badge-finding-resolved { color: var(--success-fg); background: var(--success-subtle); border-color: #aceebb; }
+
+.finding-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.finding-timeline li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.finding-timeline-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+  background: var(--fg-muted);
+}
+
+.finding-timeline-opened { background: var(--accent-emphasis); }
+.finding-timeline-reopened { background: var(--attention-emphasis); }
+.finding-timeline-resolved { background: var(--success-emphasis); }
+
 /* ---------- forms / controls ---------- */
 
 .toolbar {

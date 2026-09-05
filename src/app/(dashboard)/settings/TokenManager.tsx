@@ -40,6 +40,9 @@ export function TokenManager({ projectId, tokens }: { projectId: string; tokens:
         </div>
       )}
 
+      <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>
+        Use one ingest token per repo.
+      </p>
       <div className="toolbar">
         <input
           type="text"

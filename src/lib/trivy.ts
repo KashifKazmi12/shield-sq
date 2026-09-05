@@ -86,7 +86,18 @@ export type TrivyFindingInput = {
   resource: string | null;
   fixedVersion: string | null;
   ruleName: null;
+  // Stable per (CVE, package, target) so re-scans of the same project don't
+  // insert duplicate Finding rows — only genuinely new vulns are created.
+  dedupeKey: string;
 };
+
+export function trivyFindingDedupeKey(
+  vulnerabilityId: string,
+  pkgName: string | undefined,
+  target: string | undefined
+): string {
+  return `trivy:${vulnerabilityId}:${pkgName ?? ""}:${target ?? ""}`;
+}
 
 export function extractTrivyFindings(report: ParsedTrivyPayload["report"]): TrivyFindingInput[] {
   const findings: TrivyFindingInput[] = [];
@@ -100,6 +111,7 @@ export function extractTrivyFindings(report: ParsedTrivyPayload["report"]): Triv
         resource: result.Target ?? null,
         fixedVersion: vuln.FixedVersion ?? null,
         ruleName: null,
+        dedupeKey: trivyFindingDedupeKey(vuln.VulnerabilityID, vuln.PkgName, result.Target),
       });
     }
   }

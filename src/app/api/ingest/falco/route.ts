@@ -15,6 +15,7 @@ import {
 } from "@/lib/falco";
 import { normalizeFalcoPriority, severityMeetsThreshold } from "@/lib/severity";
 import { enqueueFindingsNotification, type NotifyPayload } from "@/lib/notify";
+import { initialOpenIntervals } from "@/lib/finding-lifecycle";
 
 type ProcessResult = {
   scanId: string;
@@ -59,6 +60,8 @@ async function processFalcoAlert(alert: FalcoAlert, projectId: string): Promise<
         ruleName: alert.rule,
         dedupeKey,
         detectedAt: alertTime,
+        status: "opened",
+        openIntervals: initialOpenIntervals(alertTime),
       },
     });
 

@@ -165,6 +165,9 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
 
             <div className="card" style={{ borderColor: "var(--attention-fg)", background: "var(--attention-subtle)" }}>
               <strong>Ingest token — copy it now, it won&apos;t be shown again:</strong>
+              <p className="muted" style={{ margin: "8px 0 0", fontSize: 13 }}>
+                Use one ingest token per repo.
+              </p>
               <CodeRow value={result.ingestToken} />
             </div>
           </div>

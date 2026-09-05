@@ -67,8 +67,8 @@ export default async function SettingsPage({
       <div className="card section">
         <h3>Projects</h3>
         <p className="muted" style={{ marginTop: 0 }}>
-          Each project gets its own ingest tokens and notification config — add one per repo or cluster.
-          Use the project menu in the top bar to switch which project Settings (and every other page) shows.
+          Each project gets its own ingest tokens and notification config.
+          Use one ingest token per repo. Use the project menu in the top bar to switch which project Settings shows.
         </p>
         <DataTable
           columns={[

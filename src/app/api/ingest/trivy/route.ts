@@ -6,6 +6,14 @@ import { parseTrivyPayload, trivyIdempotencyKey, extractTrivyFindings, TrivyPayl
 import { enqueueFindingsNotification } from "@/lib/notify";
 import { severityMeetsThreshold } from "@/lib/severity";
 import { MAX_INGEST_PAYLOAD_BYTES } from "@/lib/constants";
+import {
+  initialOpenIntervals,
+  isOpenStatus,
+  parseOpenIntervals,
+  reopenOpenIntervals,
+  resolveOpenIntervals,
+  type FindingStatus,
+} from "@/lib/finding-lifecycle";
 
 export async function POST(request: Request) {
   const auth = await authenticateIngestRequest(request);
@@ -42,13 +50,53 @@ export async function POST(request: Request) {
 
   const idempotencyKey = trivyIdempotencyKey(auth.projectId, parsed);
 
-  const existing = await prisma.scan.findUnique({ where: { idempotencyKey } });
-  if (existing) {
-    return NextResponse.json({ scanId: existing.id, deduped: true }, { status: 200 });
+  // Exact same CI run retry — do not reopen/resolve again.
+  const existingScan = await prisma.scan.findUnique({ where: { idempotencyKey } });
+  if (existingScan) {
+    return NextResponse.json({ scanId: existingScan.id, deduped: true }, { status: 200 });
   }
 
   const findingsInput = extractTrivyFindings(parsed.report);
-  const hasCritical = findingsInput.some((f) => f.severity === "critical");
+  const uniqueByKey = new Map<string, (typeof findingsInput)[number]>();
+  for (const f of findingsInput) {
+    if (!uniqueByKey.has(f.dedupeKey)) uniqueByKey.set(f.dedupeKey, f);
+  }
+  const uniqueFindings = [...uniqueByKey.values()];
+  const payloadKeys = uniqueFindings.map((f) => f.dedupeKey);
+  const payloadKeySet = new Set(payloadKeys);
+  const now = new Date();
+
+  const existingFindings =
+    payloadKeys.length === 0
+      ? []
+      : await prisma.finding.findMany({
+          where: { projectId: auth.projectId, tool: "trivy", dedupeKey: { in: payloadKeys } },
+        });
+  const existingByKey = new Map(
+    existingFindings.filter((f) => f.dedupeKey).map((f) => [f.dedupeKey!, f])
+  );
+
+  const toCreate: typeof uniqueFindings = [];
+  const toReopen: typeof existingFindings = [];
+  const stillOpen: typeof existingFindings = [];
+
+  for (const f of uniqueFindings) {
+    const existing = existingByKey.get(f.dedupeKey);
+    if (!existing) {
+      toCreate.push(f);
+    } else if (!isOpenStatus(existing.status)) {
+      toReopen.push(existing);
+    } else {
+      stillOpen.push(existing);
+    }
+  }
+
+  const hasCritical =
+    toCreate.some((f) => f.severity === "critical") ||
+    [...toReopen, ...stillOpen].some((f) => {
+      const incoming = uniqueByKey.get(f.dedupeKey!);
+      return (incoming?.severity ?? f.severity) === "critical";
+    });
 
   const scan = await prisma.scan.create({
     data: {
@@ -61,16 +109,98 @@ export async function POST(request: Request) {
       status: hasCritical ? "warning" : "success",
       idempotencyKey,
       rawPayload: body as object,
-      findings: {
-        create: findingsInput.map((f) => ({ ...f, projectId: auth.projectId })),
-      },
     },
-    include: { findings: true, project: { include: { notifyConfig: true } } },
+    include: { project: { include: { notifyConfig: true } } },
+  });
+
+  if (toCreate.length > 0) {
+    await prisma.finding.createMany({
+      data: toCreate.map((f) => ({
+        ...f,
+        scanId: scan.id,
+        projectId: auth.projectId,
+        status: "opened" satisfies FindingStatus,
+        openIntervals: initialOpenIntervals(now),
+        detectedAt: now,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  // Still open in this scan: refresh metadata + point at latest scan.
+  for (const existing of stillOpen) {
+    const incoming = uniqueByKey.get(existing.dedupeKey!);
+    if (!incoming) continue;
+    await prisma.finding.update({
+      where: { id: existing.id },
+      data: {
+        scanId: scan.id,
+        severity: incoming.severity,
+        title: incoming.title,
+        description: incoming.description,
+        resource: incoming.resource,
+        fixedVersion: incoming.fixedVersion,
+      },
+    });
+  }
+
+  // Previously resolved, seen again → reopened + new open interval.
+  for (const existing of toReopen) {
+    const incoming = uniqueByKey.get(existing.dedupeKey!);
+    if (!incoming) continue;
+    const intervals = reopenOpenIntervals(parseOpenIntervals(existing.openIntervals), now);
+    await prisma.finding.update({
+      where: { id: existing.id },
+      data: {
+        scanId: scan.id,
+        status: "reopened" satisfies FindingStatus,
+        openIntervals: intervals,
+        severity: incoming.severity,
+        title: incoming.title,
+        description: incoming.description,
+        resource: incoming.resource,
+        fixedVersion: incoming.fixedVersion,
+      },
+    });
+  }
+
+  // Option A: any open Trivy finding for this project missing from the payload → resolved.
+  const openInProject = await prisma.finding.findMany({
+    where: {
+      projectId: auth.projectId,
+      tool: "trivy",
+      status: { in: ["opened", "reopened"] },
+    },
+    select: { id: true, dedupeKey: true, openIntervals: true },
+  });
+
+  let resolvedCount = 0;
+  for (const finding of openInProject) {
+    if (finding.dedupeKey && payloadKeySet.has(finding.dedupeKey)) continue;
+    await prisma.finding.update({
+      where: { id: finding.id },
+      data: {
+        status: "resolved" satisfies FindingStatus,
+        openIntervals: resolveOpenIntervals(parseOpenIntervals(finding.openIntervals), now),
+      },
+    });
+    resolvedCount++;
+  }
+
+  const createdOnThisScan = await prisma.finding.findMany({
+    where: {
+      OR: [
+        { scanId: scan.id, status: "opened", dedupeKey: { in: toCreate.map((f) => f.dedupeKey) } },
+        { id: { in: toReopen.map((f) => f.id) } },
+      ],
+    },
   });
 
   const notifyConfig = scan.project.notifyConfig;
   if (notifyConfig) {
-    const toNotify = scan.findings.filter((f) => severityMeetsThreshold(f.severity, notifyConfig.severityThreshold));
+    const toNotify = createdOnThisScan.filter((f) =>
+      severityMeetsThreshold(f.severity, notifyConfig.severityThreshold)
+    );
     await enqueueFindingsNotification(
       toNotify.map((f) => ({
         findingId: f.id,
@@ -83,5 +213,15 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ scanId: scan.id, findingsCount: scan.findings.length }, { status: 201 });
+  return NextResponse.json(
+    {
+      scanId: scan.id,
+      findingsCount: toCreate.length,
+      reopened: toReopen.length,
+      stillOpen: stillOpen.length,
+      resolved: resolvedCount,
+      skippedExisting: stillOpen.length + toReopen.length,
+    },
+    { status: 201 }
+  );
 }

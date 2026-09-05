@@ -3,7 +3,8 @@ import { requireCompanySession } from "@/lib/session";
 import { getScanWithFindings } from "@/lib/queries";
 import { severityRank } from "@/lib/severity";
 import { DataTable } from "@/components/DataTable";
-import { SeverityBadge, StatusBadge } from "@/components/SeverityBadge";
+import { SeverityBadge, StatusBadge, FindingStatusBadge } from "@/components/SeverityBadge";
+import { formatFindingLifetime } from "@/lib/finding-lifecycle";
 
 // Next 16: page-level params is a Promise (Async Request APIs).
 export default async function RunDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -15,6 +16,7 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
   if (!scan || scan.project.companyId !== companyId) notFound();
 
   const findings = [...scan.findings].sort((a, b) => severityRank(a.severity) - severityRank(b.severity));
+  const now = new Date();
 
   return (
     <div>
@@ -45,6 +47,8 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
           columns={[
             { id: "title", header: "Title", mobileFullWidth: true },
             { id: "severity", header: "Severity" },
+            { id: "status", header: "Status" },
+            { id: "lifetime", header: "Lifetime" },
             { id: "resource", header: "Resource", mobileFullWidth: true },
             { id: "fixed", header: "Fixed version" },
           ]}
@@ -53,6 +57,8 @@ export default async function RunDetailPage({ params }: { params: Promise<{ id: 
             cells: [
               f.title,
               <SeverityBadge key="sev" severity={f.severity} />,
+              <FindingStatusBadge key="st" status={f.status} />,
+              formatFindingLifetime(f.openIntervals, now),
               f.resource ?? "—",
               f.fixedVersion ?? <span className="muted">unfixed</span>,
             ],
