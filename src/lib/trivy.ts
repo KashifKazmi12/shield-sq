@@ -99,6 +99,21 @@ export function trivyFindingDedupeKey(
   return `trivy:${vulnerabilityId}:${pkgName ?? ""}:${target ?? ""}`;
 }
 
+/**
+ * Rebuild the stable Trivy dedupe key from stored Finding fields.
+ * Title is `${VulnerabilityID} in ${PkgName}` (or just VulnerabilityID);
+ * resource is Trivy's Result.Target.
+ */
+export function trivyDedupeKeyFromStoredFinding(
+  title: string,
+  resource: string | null | undefined
+): string {
+  const match = /^(.+?) in (.+)$/.exec(title);
+  const vulnerabilityId = match ? match[1] : title;
+  const pkgName = match ? match[2] : undefined;
+  return trivyFindingDedupeKey(vulnerabilityId, pkgName, resource ?? undefined);
+}
+
 export function extractTrivyFindings(report: ParsedTrivyPayload["report"]): TrivyFindingInput[] {
   const findings: TrivyFindingInput[] = [];
   for (const result of report.Results ?? []) {

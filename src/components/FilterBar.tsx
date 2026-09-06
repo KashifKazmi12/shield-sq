@@ -7,6 +7,10 @@ export type FilterField = {
   name: string;
   label: string;
   options: { value: string; label: string }[];
+  /** When set, used if the URL has no value for this field. */
+  defaultValue?: string;
+  /** Skip the empty "{label}: All" option (use when defaultValue covers the default). */
+  hideAllOption?: boolean;
 };
 
 export function FilterBar({ fields }: { fields: FilterField[] }) {
@@ -35,11 +39,11 @@ export function FilterBar({ fields }: { fields: FilterField[] }) {
       {fields.map((field) => (
         <select
           key={field.name}
-          value={searchParams.get(field.name) ?? ""}
+          value={searchParams.get(field.name) ?? field.defaultValue ?? ""}
           disabled={isPending}
           onChange={(e) => onChange(field.name, e.target.value)}
         >
-          <option value="">{field.label}: All</option>
+          {!field.hideAllOption && <option value="">{field.label}: All</option>}
           {field.options.map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}

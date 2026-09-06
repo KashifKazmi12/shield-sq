@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { authenticateIngestRequest, ingestAuthErrorResponse, isPayloadTooLarge, readJsonWithLimit, PayloadTooLargeError } from "@/lib/ingest-auth";
 import { logRejectedIngest } from "@/lib/audit";
-import { parseTrivyPayload, trivyIdempotencyKey, extractTrivyFindings, TrivyPayloadError } from "@/lib/trivy";
+import {
+  parseTrivyPayload,
+  trivyIdempotencyKey,
+  extractTrivyFindings,
+  trivyDedupeKeyFromStoredFinding,
+  TrivyPayloadError,
+} from "@/lib/trivy";
 import { enqueueFindingsNotification } from "@/lib/notify";
 import { severityMeetsThreshold } from "@/lib/severity";
 import { MAX_INGEST_PAYLOAD_BYTES } from "@/lib/constants";
@@ -66,19 +72,41 @@ export async function POST(request: Request) {
   const payloadKeySet = new Set(payloadKeys);
   const now = new Date();
 
+  // Include null-key rows so older findings (created before dedupeKey was
+  // written) can still match by reconstructed identity — otherwise every
+  // scan resolves them and inserts duplicates.
   const existingFindings =
     payloadKeys.length === 0
       ? []
       : await prisma.finding.findMany({
-          where: { projectId: auth.projectId, tool: "trivy", dedupeKey: { in: payloadKeys } },
+          where: {
+            projectId: auth.projectId,
+            tool: "trivy",
+            OR: [{ dedupeKey: { in: payloadKeys } }, { dedupeKey: null }],
+          },
         });
-  const existingByKey = new Map(
-    existingFindings.filter((f) => f.dedupeKey).map((f) => [f.dedupeKey!, f])
-  );
+
+  const existingByKey = new Map<string, (typeof existingFindings)[number]>();
+  for (const f of existingFindings) {
+    if (f.dedupeKey) existingByKey.set(f.dedupeKey, f);
+  }
+  const nullKeyFindings = existingFindings
+    .filter((f) => !f.dedupeKey)
+    .sort((a, b) => {
+      const aOpen = isOpenStatus(a.status) ? 0 : 1;
+      const bOpen = isOpenStatus(b.status) ? 0 : 1;
+      if (aOpen !== bOpen) return aOpen - bOpen;
+      return b.detectedAt.getTime() - a.detectedAt.getTime();
+    });
+  for (const f of nullKeyFindings) {
+    const key = trivyDedupeKeyFromStoredFinding(f.title, f.resource);
+    if (!existingByKey.has(key)) existingByKey.set(key, f);
+  }
 
   const toCreate: typeof uniqueFindings = [];
-  const toReopen: typeof existingFindings = [];
-  const stillOpen: typeof existingFindings = [];
+  const toReopen: Array<(typeof existingFindings)[number]> = [];
+  const stillOpen: Array<(typeof existingFindings)[number]> = [];
+  const matchedIds = new Set<string>();
 
   for (const f of uniqueFindings) {
     const existing = existingByKey.get(f.dedupeKey);
@@ -86,15 +114,18 @@ export async function POST(request: Request) {
       toCreate.push(f);
     } else if (!isOpenStatus(existing.status)) {
       toReopen.push(existing);
+      matchedIds.add(existing.id);
     } else {
       stillOpen.push(existing);
+      matchedIds.add(existing.id);
     }
   }
 
   const hasCritical =
     toCreate.some((f) => f.severity === "critical") ||
     [...toReopen, ...stillOpen].some((f) => {
-      const incoming = uniqueByKey.get(f.dedupeKey!);
+      const key = f.dedupeKey ?? trivyDedupeKeyFromStoredFinding(f.title, f.resource);
+      const incoming = uniqueByKey.get(key);
       return (incoming?.severity ?? f.severity) === "critical";
     });
 
@@ -128,12 +159,15 @@ export async function POST(request: Request) {
   }
 
   // Still open: refresh metadata only — do NOT move Finding.scanId (first-seen).
+  // Also persist dedupeKey when the matched row still has null (legacy rows).
   for (const existing of stillOpen) {
-    const incoming = uniqueByKey.get(existing.dedupeKey!);
+    const key = existing.dedupeKey ?? trivyDedupeKeyFromStoredFinding(existing.title, existing.resource);
+    const incoming = uniqueByKey.get(key);
     if (!incoming) continue;
     await prisma.finding.update({
       where: { id: existing.id },
       data: {
+        dedupeKey: incoming.dedupeKey,
         severity: incoming.severity,
         title: incoming.title,
         description: incoming.description,
@@ -145,12 +179,14 @@ export async function POST(request: Request) {
 
   // Previously resolved, seen again → reopened (keep original scanId).
   for (const existing of toReopen) {
-    const incoming = uniqueByKey.get(existing.dedupeKey!);
+    const key = existing.dedupeKey ?? trivyDedupeKeyFromStoredFinding(existing.title, existing.resource);
+    const incoming = uniqueByKey.get(key);
     if (!incoming) continue;
     const intervals = reopenOpenIntervals(parseOpenIntervals(existing.openIntervals), now);
     await prisma.finding.update({
       where: { id: existing.id },
       data: {
+        dedupeKey: incoming.dedupeKey,
         status: "reopened" satisfies FindingStatus,
         openIntervals: intervals,
         severity: incoming.severity,
@@ -194,6 +230,7 @@ export async function POST(request: Request) {
 
   let resolvedCount = 0;
   for (const finding of openInProject) {
+    if (matchedIds.has(finding.id)) continue;
     if (finding.dedupeKey && payloadKeySet.has(finding.dedupeKey)) continue;
     await prisma.finding.update({
       where: { id: finding.id },

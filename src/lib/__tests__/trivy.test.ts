@@ -3,6 +3,7 @@ import {
   parseTrivyPayload,
   trivyIdempotencyKey,
   trivyFindingDedupeKey,
+  trivyDedupeKeyFromStoredFinding,
   extractTrivyFindings,
   TrivyPayloadError,
 } from "../trivy";
@@ -103,6 +104,21 @@ describe("trivyFindingDedupeKey", () => {
     expect(trivyFindingDedupeKey("CVE-1", "openssl", "a")).not.toBe(
       trivyFindingDedupeKey("CVE-1", "openssl", "b")
     );
+  });
+});
+
+describe("trivyDedupeKeyFromStoredFinding", () => {
+  it("rebuilds the same key from title + resource", () => {
+    expect(trivyDedupeKeyFromStoredFinding("CVE-1 in openssl", "sample:latest (alpine)")).toBe(
+      trivyFindingDedupeKey("CVE-1", "openssl", "sample:latest (alpine)")
+    );
+  });
+
+  it("handles scoped package names and missing package", () => {
+    expect(trivyDedupeKeyFromStoredFinding("CVE-1 in @sigstore/core", "Node.js")).toBe(
+      "trivy:CVE-1:@sigstore/core:Node.js"
+    );
+    expect(trivyDedupeKeyFromStoredFinding("CVE-9", "app:latest")).toBe("trivy:CVE-9::app:latest");
   });
 });
 

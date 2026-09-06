@@ -1,5 +1,8 @@
 import { prisma } from "./prisma";
 
+/** Cookie name for the last-selected project (set via server action). */
+export const CURRENT_PROJECT_COOKIE = "shieldsq_current_project";
+
 // Every lookup is scoped to companyId — a project id from another tenant
 // must never resolve here, even if a viewer guesses/pastes one in the URL.
 export async function resolveProject(companyId: string, projectIdParam?: string) {

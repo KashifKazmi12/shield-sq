@@ -9,7 +9,7 @@ WORKDIR /app
 
 # ---- deps: full install (incl. devDependencies) for building ----
 FROM base AS deps
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 # `postinstall` runs `prisma generate`, which needs the schema present —
 # copy it before `npm ci`, not just package.json.
 COPY prisma ./prisma
@@ -20,7 +20,7 @@ RUN npm ci
 
 # ---- prod-deps: separate install, --omit=dev, for the runtime image ----
 FROM base AS prod-deps
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY prisma ./prisma
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build"
 RUN npm ci --omit=dev

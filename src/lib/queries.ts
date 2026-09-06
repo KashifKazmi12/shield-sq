@@ -179,15 +179,24 @@ export type FindingFilters = {
   fixedStatus?: "fixed" | "unfixed";
   ruleName?: string;
   resource?: string;
+  /** Finding lifecycle status. Default for Trivy: open only (opened + reopened). */
+  status?: "opened" | "reopened" | "resolved" | "open" | "all";
   cursor?: string;
   take?: number;
 };
 
 export async function listTrivyFindings(projectId: string, filters: FindingFilters) {
   const take = filters.take ?? DEFAULT_PAGE_SIZE;
+  const statusFilter =
+    filters.status === "all"
+      ? {}
+      : filters.status === "open" || !filters.status
+        ? { status: { in: ["opened", "reopened"] } }
+        : { status: filters.status };
   const where = {
     tool: "trivy" as const,
     projectId,
+    ...statusFilter,
     ...(filters.repo
       ? { observations: { some: { scan: { repo: filters.repo } } } }
       : {}),
@@ -242,7 +251,12 @@ export async function listFalcoFindings(projectId: string, filters: FindingFilte
 export async function getTopOffendingImages(projectId: string, limit = 5) {
   const grouped = await prisma.finding.groupBy({
     by: ["resource"],
-    where: { projectId, tool: "trivy", resource: { not: null } },
+    where: {
+      projectId,
+      tool: "trivy",
+      resource: { not: null },
+      status: { in: ["opened", "reopened"] },
+    },
     _count: { _all: true },
     orderBy: { _count: { resource: "desc" } },
     take: limit,

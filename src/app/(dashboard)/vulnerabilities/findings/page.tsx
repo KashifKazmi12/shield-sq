@@ -18,11 +18,12 @@ export default async function VulnerabilityFindingsPage({
     repo?: string;
     fixedStatus?: "fixed" | "unfixed";
     resource?: string;
+    status?: "opened" | "reopened" | "resolved" | "open" | "all";
     cursor?: string;
   }>;
 }) {
   const { companyId } = await requireCompanySession();
-  const { project: projectParam, severity, repo, fixedStatus, resource, cursor } = await searchParams;
+  const { project: projectParam, severity, repo, fixedStatus, resource, status, cursor } = await searchParams;
   const project = await resolveProject(companyId, projectParam);
   if (!project) {
     return <p className="muted">No project configured yet.</p>;
@@ -34,6 +35,7 @@ export default async function VulnerabilityFindingsPage({
       repo,
       fixedStatus,
       resource,
+      status,
       cursor,
     }),
     getTopOffendingImages(project.id),
@@ -66,6 +68,17 @@ export default async function VulnerabilityFindingsPage({
       <div className="toolbar">
         <FilterBar
           fields={[
+            {
+              name: "status",
+              label: "Status",
+              defaultValue: "open",
+              hideAllOption: true,
+              options: [
+                { value: "open", label: "Status: Open" },
+                { value: "resolved", label: "Status: Resolved" },
+                { value: "all", label: "Status: All" },
+              ],
+            },
             { name: "severity", label: "Severity", options: SEVERITIES.map((s) => ({ value: s, label: s })) },
             {
               name: "repo",
