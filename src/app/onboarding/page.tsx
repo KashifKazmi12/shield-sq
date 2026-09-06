@@ -25,7 +25,7 @@ export default async function OnboardingPage() {
   }
   if (session.user?.role !== "admin") {
     // Viewers have nothing to configure — send them straight to the dashboard.
-    redirect("/overview");
+    redirect("/vulnerabilities");
   }
 
   const user = await prisma.user.findUnique({
@@ -33,7 +33,7 @@ export default async function OnboardingPage() {
     select: { onboardedAt: true, company: { select: { suspendedAt: true } } },
   });
   if (user?.company?.suspendedAt) redirect("/login?suspended=1");
-  if (user?.onboardedAt) redirect("/overview");
+  if (user?.onboardedAt) redirect("/vulnerabilities");
 
   return <OnboardingWizard baseUrl={await resolveBaseUrl()} />;
 }

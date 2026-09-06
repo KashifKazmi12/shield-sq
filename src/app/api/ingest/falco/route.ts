@@ -65,6 +65,14 @@ async function processFalcoAlert(alert: FalcoAlert, projectId: string): Promise<
       },
     });
 
+    await prisma.scanFinding.create({
+      data: {
+        scanId: scan.id,
+        findingId: finding.id,
+        observedAt: alertTime,
+      },
+    });
+
     const notifyConfig = scan.project.notifyConfig;
     const shouldNotify = notifyConfig && severityMeetsThreshold(severity, notifyConfig.severityThreshold);
 
@@ -91,6 +99,12 @@ async function processFalcoAlert(alert: FalcoAlert, projectId: string): Promise<
       const existingFinding = await prisma.finding.findUnique({
         where: { projectId_dedupeKey: { projectId, dedupeKey: dedupeKey! } },
       });
+      if (existingFinding) {
+        await prisma.scanFinding.createMany({
+          data: [{ scanId: scan.id, findingId: existingFinding.id, observedAt: alertTime }],
+          skipDuplicates: true,
+        });
+      }
       return { scanId: scan.id, findingId: existingFinding?.id, deduped: true, notify: null };
     }
     throw err;

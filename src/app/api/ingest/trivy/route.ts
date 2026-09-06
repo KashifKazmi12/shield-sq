@@ -127,14 +127,13 @@ export async function POST(request: Request) {
     });
   }
 
-  // Still open in this scan: refresh metadata + point at latest scan.
+  // Still open: refresh metadata only — do NOT move Finding.scanId (first-seen).
   for (const existing of stillOpen) {
     const incoming = uniqueByKey.get(existing.dedupeKey!);
     if (!incoming) continue;
     await prisma.finding.update({
       where: { id: existing.id },
       data: {
-        scanId: scan.id,
         severity: incoming.severity,
         title: incoming.title,
         description: incoming.description,
@@ -144,7 +143,7 @@ export async function POST(request: Request) {
     });
   }
 
-  // Previously resolved, seen again → reopened + new open interval.
+  // Previously resolved, seen again → reopened (keep original scanId).
   for (const existing of toReopen) {
     const incoming = uniqueByKey.get(existing.dedupeKey!);
     if (!incoming) continue;
@@ -152,7 +151,6 @@ export async function POST(request: Request) {
     await prisma.finding.update({
       where: { id: existing.id },
       data: {
-        scanId: scan.id,
         status: "reopened" satisfies FindingStatus,
         openIntervals: intervals,
         severity: incoming.severity,
@@ -161,6 +159,26 @@ export async function POST(request: Request) {
         resource: incoming.resource,
         fixedVersion: incoming.fixedVersion,
       },
+    });
+  }
+
+  // Link every payload finding to this scan (immutable run snapshot).
+  const observedFindings = await prisma.finding.findMany({
+    where: {
+      projectId: auth.projectId,
+      tool: "trivy",
+      dedupeKey: { in: payloadKeys },
+    },
+    select: { id: true },
+  });
+  if (observedFindings.length > 0) {
+    await prisma.scanFinding.createMany({
+      data: observedFindings.map((f) => ({
+        scanId: scan.id,
+        findingId: f.id,
+        observedAt: now,
+      })),
+      skipDuplicates: true,
     });
   }
 
@@ -187,14 +205,19 @@ export async function POST(request: Request) {
     resolvedCount++;
   }
 
-  const createdOnThisScan = await prisma.finding.findMany({
-    where: {
-      OR: [
-        { scanId: scan.id, status: "opened", dedupeKey: { in: toCreate.map((f) => f.dedupeKey) } },
-        { id: { in: toReopen.map((f) => f.id) } },
-      ],
-    },
-  });
+  const createdOnThisScan =
+    toCreate.length === 0 && toReopen.length === 0
+      ? []
+      : await prisma.finding.findMany({
+          where: {
+            OR: [
+              ...(toCreate.length
+                ? [{ projectId: auth.projectId, tool: "trivy" as const, dedupeKey: { in: toCreate.map((f) => f.dedupeKey) } }]
+                : []),
+              ...(toReopen.length ? [{ id: { in: toReopen.map((f) => f.id) } }] : []),
+            ],
+          },
+        });
 
   const notifyConfig = scan.project.notifyConfig;
   if (notifyConfig) {
@@ -216,7 +239,8 @@ export async function POST(request: Request) {
   return NextResponse.json(
     {
       scanId: scan.id,
-      findingsCount: toCreate.length,
+      findingsCount: observedFindings.length,
+      created: toCreate.length,
       reopened: toReopen.length,
       stillOpen: stillOpen.length,
       resolved: resolvedCount,

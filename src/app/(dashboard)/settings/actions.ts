@@ -56,6 +56,26 @@ export async function revokeIngestToken(tokenId: string) {
   revalidatePath("/settings");
 }
 
+export async function renameIngestToken(tokenId: string, label: string) {
+  const { companyId, email } = await requireAdmin();
+  const token = await prisma.ingestToken.findUnique({ where: { id: tokenId }, include: { project: true } });
+  if (!token || token.project.companyId !== companyId) {
+    throw new Error("Forbidden: token does not belong to your company");
+  }
+  const nextLabel = label.trim() || null;
+  await prisma.ingestToken.update({
+    where: { id: tokenId },
+    data: { label: nextLabel },
+  });
+  await logAdminAction({
+    companyId,
+    actorEmail: email,
+    action: "token.rename",
+    detail: `project=${token.project.name} from=${token.label ?? "(none)"} to=${nextLabel ?? "(none)"}`,
+  });
+  revalidatePath("/settings");
+}
+
 export async function updateNotificationConfig(projectId: string, data: {
   slackWebhookUrl: string;
   notifyEmail: string;

@@ -7,6 +7,8 @@ import {
   parseOpenIntervals,
   reopenOpenIntervals,
   resolveOpenIntervals,
+  buildOpenInventoryTrend,
+  wasOpenOnUtcDay,
 } from "../finding-lifecycle";
 
 describe("formatLifetime", () => {
@@ -56,5 +58,42 @@ describe("open interval helpers", () => {
     expect(parseOpenIntervals([{ start: "x", end: null }, { bad: true }])).toEqual([
       { start: "x", end: null },
     ]);
+  });
+});
+
+describe("open inventory trend", () => {
+  it("counts a finding on each day it was open, not only detected day", () => {
+    const now = new Date("2026-01-10T12:00:00.000Z");
+    const trend = buildOpenInventoryTrend(
+      [
+        {
+          severity: "critical",
+          openIntervals: [
+            { start: "2026-01-01T08:00:00.000Z", end: "2026-01-03T12:00:00.000Z" },
+            { start: "2026-01-05T00:00:00.000Z", end: null },
+          ],
+        },
+      ],
+      new Date("2026-01-01T00:00:00.000Z"),
+      new Date("2026-01-07T23:59:59.999Z"),
+      now
+    );
+
+    const byDate = Object.fromEntries(trend.map((row) => [row.date, row.critical]));
+    expect(byDate["2026-01-01"]).toBe(1);
+    expect(byDate["2026-01-02"]).toBe(1);
+    expect(byDate["2026-01-03"]).toBe(1);
+    expect(byDate["2026-01-04"]).toBe(0); // resolved gap
+    expect(byDate["2026-01-05"]).toBe(1);
+    expect(byDate["2026-01-06"]).toBe(1);
+    expect(byDate["2026-01-07"]).toBe(1);
+  });
+
+  it("wasOpenOnUtcDay treats null end as still open", () => {
+    const intervals = [{ start: "2026-01-01T00:00:00.000Z", end: null }];
+    const now = new Date("2026-01-05T00:00:00.000Z");
+    expect(wasOpenOnUtcDay(intervals, "2026-01-01", now)).toBe(true);
+    expect(wasOpenOnUtcDay(intervals, "2026-01-05", now)).toBe(true);
+    expect(wasOpenOnUtcDay(intervals, "2026-01-06", now)).toBe(false);
   });
 });

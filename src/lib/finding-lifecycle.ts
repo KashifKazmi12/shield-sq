@@ -1,3 +1,5 @@
+import { eachUtcDay, emptySeverityBucket } from "./trend-range";
+
 export type FindingStatus = "opened" | "resolved" | "reopened";
 
 export type OpenInterval = {
@@ -108,6 +110,55 @@ export function formatLifetime(ms: number): string {
 
 export function formatFindingLifetime(intervalsRaw: unknown, now: Date = new Date()): string {
   return formatLifetime(computeOpenLifetimeMs(parseOpenIntervals(intervalsRaw), now));
+}
+
+/**
+ * True if any open interval overlaps the given UTC calendar day
+ * (YYYY-MM-DD), treating a null end as still open through `now`.
+ */
+export function wasOpenOnUtcDay(
+  intervals: OpenInterval[],
+  dayIso: string,
+  now: Date = new Date()
+): boolean {
+  const dayStart = Date.parse(`${dayIso}T00:00:00.000Z`);
+  const dayEnd = Date.parse(`${dayIso}T23:59:59.999Z`);
+  if (Number.isNaN(dayStart) || Number.isNaN(dayEnd)) return false;
+
+  for (const interval of intervals) {
+    const startMs = Date.parse(interval.start);
+    if (Number.isNaN(startMs)) continue;
+    const endMs = interval.end ? Date.parse(interval.end) : now.getTime();
+    if (Number.isNaN(endMs)) continue;
+    if (startMs <= dayEnd && endMs >= dayStart) return true;
+  }
+  return false;
+}
+
+/**
+ * Per-day open inventory by severity: a finding counts on every UTC day it
+ * was actively open (from openIntervals), not only on first detection.
+ */
+export function buildOpenInventoryTrend(
+  findings: Array<{ severity: string; openIntervals: unknown }>,
+  from: Date,
+  to: Date,
+  now: Date = new Date()
+): Array<Record<string, string | number>> {
+  const days = eachUtcDay(from, to);
+  const byDay = new Map(days.map((day) => [day, emptySeverityBucket()]));
+
+  for (const f of findings) {
+    const intervals = parseOpenIntervals(f.openIntervals);
+    if (intervals.length === 0) continue;
+    for (const day of days) {
+      if (!wasOpenOnUtcDay(intervals, day, now)) continue;
+      const bucket = byDay.get(day)!;
+      bucket[f.severity] = (bucket[f.severity] ?? 0) + 1;
+    }
+  }
+
+  return days.map((date) => ({ date, ...byDay.get(date)! }));
 }
 
 export type LifecycleEvent = {

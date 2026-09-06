@@ -33,7 +33,14 @@ export function NewProjectForm() {
         onChange={(e) => setName(e.target.value)}
       />
       <button onClick={handleCreate} disabled={isPending || !name.trim()}>
-        New project
+        {isPending ? (
+          <>
+            <span className="btn-spinner" aria-hidden="true" />
+            Creating…
+          </>
+        ) : (
+          "New project"
+        )}
       </button>
       {error && <span style={{ color: "var(--danger-fg)", fontSize: 13 }}>{error}</span>}
     </div>

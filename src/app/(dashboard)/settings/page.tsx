@@ -24,7 +24,7 @@ export default async function SettingsPage({
   // notification management is admin-only, and password change now lives in
   // the header's account menu, not Settings (see UserMenu.tsx).
   if (!isAdmin) {
-    redirect("/overview");
+    redirect("/vulnerabilities");
   }
 
   const { project: projectParam } = await searchParams;

@@ -95,7 +95,7 @@ async function seedTrivyData(projectId: string) {
       const cves = pickMany(CVE_POOL, findingCount);
       const hasCritical = cves.some((c) => c.severity === "critical");
 
-      await prisma.scan.create({
+      const scan = await prisma.scan.create({
         data: {
           projectId,
           source: "trivy",
@@ -117,10 +117,24 @@ async function seedTrivyData(projectId: string) {
               resource: `${image}:latest`,
               fixedVersion: cve.fixed,
               detectedAt: createdAt,
+              status: "opened",
+              openIntervals: [{ start: createdAt.toISOString(), end: null }],
             })),
           },
         },
+        include: { findings: true },
       });
+
+      if (scan.findings.length > 0) {
+        await prisma.scanFinding.createMany({
+          data: scan.findings.map((f) => ({
+            scanId: scan.id,
+            findingId: f.id,
+            observedAt: createdAt,
+          })),
+          skipDuplicates: true,
+        });
+      }
     }
   }
 }
@@ -166,7 +180,7 @@ async function seedFalcoData(projectId: string) {
 
     const dedupeKey = falcoDedupeKey({ rule: alert.rule.rule, output: alert.output, time: alert.time.toISOString() });
 
-    await prisma.finding.upsert({
+    const finding = await prisma.finding.upsert({
       where: { projectId_dedupeKey: { projectId, dedupeKey } },
       update: {},
       create: {
@@ -180,7 +194,14 @@ async function seedFalcoData(projectId: string) {
         ruleName: alert.rule.rule,
         dedupeKey,
         detectedAt: alert.time,
+        status: "opened",
+        openIntervals: [{ start: alert.time.toISOString(), end: null }],
       },
+    });
+
+    await prisma.scanFinding.createMany({
+      data: [{ scanId, findingId: finding.id, observedAt: alert.time }],
+      skipDuplicates: true,
     });
   }
 }

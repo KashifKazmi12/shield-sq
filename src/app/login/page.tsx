@@ -41,7 +41,7 @@ function LoginForm() {
     // Hard navigation, not router.push — the destination depends on
     // middleware's role check (super_admin -> /companies, un-onboarded
     // admin -> /onboarding), which needs a fresh request to evaluate.
-    window.location.assign("/overview");
+    window.location.assign("/vulnerabilities");
   }
 
   return (

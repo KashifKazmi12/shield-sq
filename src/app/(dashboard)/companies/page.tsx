@@ -7,7 +7,7 @@ import { CompanyManager } from "./CompanyManager";
 export default async function CompaniesPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
-  if (session.user?.role !== "super_admin") redirect("/overview");
+  if (session.user?.role !== "super_admin") redirect("/vulnerabilities");
 
   const companies = await prisma.company.findMany({
     orderBy: { createdAt: "desc" },

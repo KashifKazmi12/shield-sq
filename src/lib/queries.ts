@@ -1,5 +1,7 @@
 import { prisma } from "./prisma";
 import { SEVERITIES, DEFAULT_PAGE_SIZE } from "./constants";
+import { eachUtcDay, emptySeverityBucket } from "./trend-range";
+import { buildOpenInventoryTrend } from "./finding-lifecycle";
 
 export async function listProjects(companyId: string) {
   return prisma.project.findMany({ where: { companyId }, orderBy: { name: "asc" } });
@@ -9,7 +11,7 @@ export async function getSeverityCounts(projectId: string, tool?: "trivy" | "fal
   const counts = await prisma.finding.groupBy({
     by: ["severity"],
     where: {
-      scan: { projectId },
+      projectId,
       ...(tool ? { tool } : {}),
     },
     _count: { _all: true },
@@ -22,12 +24,27 @@ export async function getSeverityCounts(projectId: string, tool?: "trivy" | "fal
   return result;
 }
 
-export async function getOverviewStats(projectId: string) {
+export async function getOverviewStats(projectId: string, tool?: "trivy" | "falco") {
+  const findingWhere = {
+    projectId,
+    ...(tool ? { tool } : {}),
+  };
   const [severityCounts, totalFindings, openCritical, totalScans] = await Promise.all([
-    getSeverityCounts(projectId),
-    prisma.finding.count({ where: { scan: { projectId } } }),
-    prisma.finding.count({ where: { scan: { projectId }, severity: "critical" } }),
-    prisma.scan.count({ where: { projectId } }),
+    getSeverityCounts(projectId, tool),
+    prisma.finding.count({ where: findingWhere }),
+    prisma.finding.count({
+      where: {
+        ...findingWhere,
+        severity: "critical",
+        ...(tool === "trivy" ? { status: { in: ["opened", "reopened"] } } : {}),
+      },
+    }),
+    prisma.scan.count({
+      where: {
+        projectId,
+        ...(tool ? { source: tool } : {}),
+      },
+    }),
   ]);
 
   const healthScore = computeHealthScore(severityCounts);
@@ -48,7 +65,7 @@ export async function getRecentScans(
     },
     orderBy: { createdAt: "desc" },
     take: limit,
-    include: { _count: { select: { findings: true } } },
+    include: { _count: { select: { observations: true } } },
   });
 }
 
@@ -62,12 +79,15 @@ function computeHealthScore(counts: Record<string, number>) {
   return Math.max(0, Math.round(100 - deduction));
 }
 
-export async function getFindingsTrend(projectId: string, days: number, tool?: "trivy" | "falco") {
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+export async function getFindingsTrend(
+  projectId: string,
+  options: { from: Date; to: Date; tool?: "trivy" | "falco" }
+) {
+  const { from, to, tool } = options;
   const findings = await prisma.finding.findMany({
     where: {
-      scan: { projectId },
-      detectedAt: { gte: since },
+      projectId,
+      detectedAt: { gte: from, lte: to },
       ...(tool ? { tool } : {}),
     },
     select: { detectedAt: true, severity: true },
@@ -75,9 +95,12 @@ export async function getFindingsTrend(projectId: string, days: number, tool?: "
   });
 
   const byDay = new Map<string, Record<string, number>>();
+  for (const day of eachUtcDay(from, to)) {
+    byDay.set(day, emptySeverityBucket());
+  }
   for (const f of findings) {
     const day = f.detectedAt.toISOString().slice(0, 10);
-    const bucket = byDay.get(day) ?? Object.fromEntries(SEVERITIES.map((s) => [s, 0]));
+    const bucket = byDay.get(day) ?? emptySeverityBucket();
     bucket[f.severity] = (bucket[f.severity] ?? 0) + 1;
     byDay.set(day, bucket);
   }
@@ -87,17 +110,41 @@ export async function getFindingsTrend(projectId: string, days: number, tool?: "
     .map(([date, counts]) => ({ date, ...counts }));
 }
 
+/**
+ * Trivy open-inventory trend: each finding counts on every day it was open
+ * (openIntervals), so the line stays high until resolve and rises again on reopen.
+ */
+export async function getTrivyOpenTrend(
+  projectId: string,
+  options: { from: Date; to: Date }
+) {
+  const { from, to } = options;
+  const findings = await prisma.finding.findMany({
+    where: {
+      projectId,
+      tool: "trivy",
+      // Anything first-seen after the window can't contribute to open days in range.
+      detectedAt: { lte: to },
+    },
+    select: { severity: true, openIntervals: true },
+  });
+
+  return buildOpenInventoryTrend(findings, from, to);
+}
+
 export async function getMeanTimeToFix(projectId: string) {
-  // "Fixed" isn't tracked as a distinct state in the current schema — a
-  // finding is treated as resolved when it stops appearing in the *latest*
-  // scan for its resource. Approximated here as the gap between a finding's
-  // detectedAt and the next scan of the same source that no longer contains
-  // an open finding with the same title+resource. This is a coarse proxy,
-  // not an exact MTTR; see GAPS.md.
+  // Approximated as the gap between first observation of a finding key and
+  // the next Trivy scan that no longer observes that key. Coarse proxy; see GAPS.md.
   const scans = await prisma.scan.findMany({
     where: { projectId, source: "trivy" },
     orderBy: { createdAt: "asc" },
-    include: { findings: true },
+    include: {
+      observations: {
+        include: {
+          finding: { select: { title: true, resource: true, detectedAt: true } },
+        },
+      },
+    },
   });
 
   if (scans.length < 2) return null;
@@ -106,16 +153,18 @@ export async function getMeanTimeToFix(projectId: string) {
   const resolutionTimesMs: number[] = [];
 
   for (const scan of scans) {
-    const currentKeys = new Set(scan.findings.map((f) => `${f.title}::${f.resource}`));
+    const currentKeys = new Set(
+      scan.observations.map((o) => `${o.finding.title}::${o.finding.resource}`)
+    );
     for (const [key, firstSeen] of seen) {
       if (!currentKeys.has(key)) {
         resolutionTimesMs.push(scan.createdAt.getTime() - firstSeen.getTime());
         seen.delete(key);
       }
     }
-    for (const f of scan.findings) {
-      const key = `${f.title}::${f.resource}`;
-      if (!seen.has(key)) seen.set(key, f.detectedAt);
+    for (const o of scan.observations) {
+      const key = `${o.finding.title}::${o.finding.resource}`;
+      if (!seen.has(key)) seen.set(key, o.finding.detectedAt);
     }
   }
 
@@ -138,10 +187,10 @@ export async function listTrivyFindings(projectId: string, filters: FindingFilte
   const take = filters.take ?? DEFAULT_PAGE_SIZE;
   const where = {
     tool: "trivy" as const,
-    scan: {
-      projectId,
-      ...(filters.repo ? { repo: filters.repo } : {}),
-    },
+    projectId,
+    ...(filters.repo
+      ? { observations: { some: { scan: { repo: filters.repo } } } }
+      : {}),
     ...(filters.severity ? { severity: filters.severity } : {}),
     ...(filters.fixedStatus === "fixed" ? { fixedVersion: { not: null } } : {}),
     ...(filters.fixedStatus === "unfixed" ? { fixedVersion: null } : {}),
@@ -168,7 +217,7 @@ export async function listFalcoFindings(projectId: string, filters: FindingFilte
   const take = filters.take ?? DEFAULT_PAGE_SIZE;
   const where = {
     tool: "falco" as const,
-    scan: { projectId },
+    projectId,
     ...(filters.severity ? { severity: filters.severity } : {}),
     ...(filters.ruleName ? { ruleName: filters.ruleName } : {}),
     ...(filters.resource ? { resource: { contains: filters.resource, mode: "insensitive" as const } } : {}),
@@ -193,12 +242,29 @@ export async function listFalcoFindings(projectId: string, filters: FindingFilte
 export async function getTopOffendingImages(projectId: string, limit = 5) {
   const grouped = await prisma.finding.groupBy({
     by: ["resource"],
-    where: { scan: { projectId }, tool: "trivy", resource: { not: null } },
+    where: { projectId, tool: "trivy", resource: { not: null } },
     _count: { _all: true },
     orderBy: { _count: { resource: "desc" } },
     take: limit,
   });
   return grouped.map((g) => ({ resource: g.resource, count: g._count._all }));
+}
+
+/** Open critical Trivy findings, newest first — for the vulnerabilities dashboard. */
+export async function getTopCriticalFindings(projectId: string, limit = 10) {
+  return prisma.finding.findMany({
+    where: {
+      projectId,
+      tool: "trivy",
+      severity: "critical",
+      status: { in: ["opened", "reopened"] },
+    },
+    orderBy: { detectedAt: "desc" },
+    take: limit,
+    include: {
+      scan: { select: { repo: true } },
+    },
+  });
 }
 
 export type PipelineRunFilters = {
@@ -223,7 +289,7 @@ export async function listPipelineRuns(projectId: string, filters: PipelineRunFi
       take: take + 1,
       ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
       orderBy: { createdAt: "desc" },
-      include: { _count: { select: { findings: true } } },
+      include: { _count: { select: { observations: true } } },
     }),
     prisma.scan.count({ where }),
   ]);
@@ -233,9 +299,39 @@ export async function listPipelineRuns(projectId: string, filters: PipelineRunFi
   return { runs: page, nextCursor: hasMore ? page[page.length - 1].id : null, total };
 }
 
-export async function getScanWithFindings(scanId: string) {
+export async function getScan(scanId: string) {
   return prisma.scan.findUnique({
     where: { id: scanId },
-    include: { findings: { orderBy: { severity: "asc" } }, project: true },
+    include: {
+      project: true,
+      _count: { select: { observations: true } },
+    },
   });
+}
+
+export async function listScanFindings(
+  scanId: string,
+  filters: { cursor?: string; take?: number } = {}
+) {
+  const take = filters.take ?? DEFAULT_PAGE_SIZE;
+  const where = { scanId };
+
+  const [observations, total] = await Promise.all([
+    prisma.scanFinding.findMany({
+      where,
+      take: take + 1,
+      ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
+      orderBy: { observedAt: "desc" },
+      include: { finding: true },
+    }),
+    prisma.scanFinding.count({ where }),
+  ]);
+
+  const hasMore = observations.length > take;
+  const page = hasMore ? observations.slice(0, take) : observations;
+  return {
+    findings: page.map((o) => o.finding),
+    nextCursor: hasMore ? page[page.length - 1].id : null,
+    total,
+  };
 }

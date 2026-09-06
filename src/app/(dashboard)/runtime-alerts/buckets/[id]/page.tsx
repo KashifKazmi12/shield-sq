@@ -1,13 +1,14 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireCompanySession } from "@/lib/session";
 import { getScan, listScanFindings } from "@/lib/queries";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 import { DataTable } from "@/components/DataTable";
 import { Pagination } from "@/components/Pagination";
-import { SeverityBadge, StatusBadge, FindingStatusBadge } from "@/components/SeverityBadge";
-import { formatFindingLifetime } from "@/lib/finding-lifecycle";
+import { SeverityBadge, StatusBadge } from "@/components/SeverityBadge";
 
-export default async function RunDetailPage({
+/** Falco ingest-bucket detail — kept under Runtime Alerts, not Pipeline Runs. */
+export default async function AlertBucketPage({
   params,
   searchParams,
 }: {
@@ -21,62 +22,58 @@ export default async function RunDetailPage({
 
   if (!scan || scan.project.companyId !== companyId) notFound();
 
-  if (scan.source === "falco") {
+  if (scan.source !== "falco") {
     const qs = new URLSearchParams();
-    qs.set("project", projectParam || scan.projectId);
+    if (projectParam) qs.set("project", projectParam);
     if (cursor) qs.set("cursor", cursor);
-    redirect(`/runtime-alerts/buckets/${scan.id}?${qs.toString()}`);
+    const q = qs.toString();
+    redirect(`/runs/${scan.id}${q ? `?${q}` : ""}`);
   }
 
   const { findings, nextCursor, total } = await listScanFindings(id, { cursor });
-  const now = new Date();
+  const projectQs = `?project=${encodeURIComponent(projectParam || scan.projectId)}`;
 
   return (
     <div>
-      <h2 className="page-title">{scan.repo ?? scan.id}</h2>
+      <h2 className="page-title">Alert bucket — {scan.createdAt.toLocaleString()}</h2>
 
       <div className="card section">
         <dl>
           <dt className="muted">Source</dt>
-          <dd>{scan.source}</dd>
+          <dd>falco</dd>
           <dt className="muted">Status</dt>
           <dd>
             <StatusBadge status={scan.status} />
           </dd>
-          <dt className="muted">Branch</dt>
-          <dd>{scan.branch ?? "—"}</dd>
-          <dt className="muted">Commit</dt>
-          <dd>{scan.commitSha ?? "—"}</dd>
-          <dt className="muted">Pipeline</dt>
-          <dd>{scan.pipelineId ?? "—"}</dd>
-          <dt className="muted">Ran at</dt>
+          <dt className="muted">Received at</dt>
           <dd>{scan.createdAt.toLocaleString()}</dd>
+          <dt className="muted">Project</dt>
+          <dd>{scan.project.name}</dd>
         </dl>
+        <p className="muted" style={{ marginBottom: 0, marginTop: 12, fontSize: 13 }}>
+          <Link href={`/runtime-alerts/feed${projectQs}`}>← Back to alerts feed</Link>
+        </p>
       </div>
 
       <div className="card">
-        <h3>Findings ({total})</h3>
+        <h3>Alerts ({total})</h3>
         <DataTable
           columns={[
-            { id: "title", header: "Title", mobileFullWidth: true },
+            { id: "title", header: "Rule", mobileFullWidth: true },
             { id: "severity", header: "Severity" },
-            { id: "status", header: "Status" },
-            { id: "lifetime", header: "Lifetime" },
-            { id: "resource", header: "Resource", mobileFullWidth: true },
-            { id: "fixed", header: "Fixed version" },
+            { id: "resource", header: "Host / pod", mobileFullWidth: true },
+            { id: "detected", header: "Detected", mobileFullWidth: true },
           ]}
           rows={findings.map((f) => ({
             key: f.id,
             cells: [
               f.title,
               <SeverityBadge key="sev" severity={f.severity} />,
-              <FindingStatusBadge key="st" status={f.status} />,
-              formatFindingLifetime(f.openIntervals, now),
               f.resource ?? "—",
-              f.fixedVersion ?? <span className="muted">unfixed</span>,
+              new Date(f.detectedAt).toLocaleString(),
             ],
           }))}
-          emptyMessage="No findings on this run."
+          emptyMessage="No alerts in this bucket."
         />
         <Pagination
           nextCursor={nextCursor}

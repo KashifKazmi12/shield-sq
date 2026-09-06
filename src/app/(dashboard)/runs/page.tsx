@@ -73,12 +73,14 @@ export default async function RunsPage({
         rows={runs.map((run) => ({
           key: run.id,
           cells: [
-            <Link key="r" href={`/runs/${run.id}`}>{run.repo ?? run.id}</Link>,
+            <Link key="r" href={`/runs/${run.id}?project=${encodeURIComponent(project.id)}`}>
+              {run.repo ?? run.id}
+            </Link>,
             run.branch ?? "—",
             run.commitSha?.slice(0, 7) ?? "—",
             run.pipelineId ?? "—",
             <StatusBadge key="st" status={run.status} />,
-            run._count.findings,
+            run._count.observations,
             run.createdAt.toLocaleString(),
           ],
         }))}

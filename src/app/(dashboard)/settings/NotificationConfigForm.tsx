@@ -55,7 +55,18 @@ export function NotificationConfigForm({ projectId, config }: { projectId: strin
           ))}
         </select>
       </div>
-      <button onClick={handleSave} disabled={isPending}>{saved ? "Saved" : "Save"}</button>
+      <button onClick={handleSave} disabled={isPending}>
+        {isPending ? (
+          <>
+            <span className="btn-spinner" aria-hidden="true" />
+            Saving…
+          </>
+        ) : saved ? (
+          "Saved"
+        ) : (
+          "Save"
+        )}
+      </button>
     </div>
   );
 }

@@ -47,7 +47,7 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
   function handleSkip() {
     startTransition(async () => {
       await skipOnboarding();
-      router.push("/overview");
+      router.push("/vulnerabilities");
       router.refresh();
     });
   }
@@ -55,7 +55,7 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
   function handleFinish() {
     // Land on the project just created, not whichever project happens to
     // sort first — otherwise a fresh setup opens onto stale/seed data.
-    router.push(result ? `/overview?project=${result.projectId}` : "/overview");
+    router.push(result ? `/vulnerabilities?project=${result.projectId}` : "/vulnerabilities");
     router.refresh();
   }
 
@@ -230,7 +230,7 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
             <h3>Step 4 — Verify</h3>
             <p className="muted" style={{ marginBottom: 12 }}>
               Once your pipeline (or the test command above) has posted at least once, findings will
-              show up on the Overview and Trivy/Falco pages. You can always create more tokens per
+              show up on the Vulnerabilities and Runtime Alerts dashboards. You can always create more tokens per
               project, or revoke this one, from Settings.
             </p>
             <div className="toolbar" style={{ justifyContent: "flex-end", marginBottom: 0 }}>

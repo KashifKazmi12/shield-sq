@@ -100,7 +100,14 @@ export function TeamManager({ teammates, currentUserId }: { teammates: Teammate[
           <option value="admin">Admin</option>
         </select>
         <button onClick={handleCreate} disabled={isPending || !email}>
-          Add teammate
+          {isPending ? (
+            <>
+              <span className="btn-spinner" aria-hidden="true" />
+              Adding…
+            </>
+          ) : (
+            "Add teammate"
+          )}
         </button>
       </div>
       {error && <p style={{ color: "var(--danger-fg)", fontSize: 13 }}>{error}</p>}

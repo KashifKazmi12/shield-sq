@@ -29,7 +29,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL("/companies", req.url));
   }
   if (!isSuperAdmin && isCompaniesRoute) {
-    return NextResponse.redirect(new URL("/overview", req.url));
+    return NextResponse.redirect(new URL("/vulnerabilities", req.url));
   }
 
   return NextResponse.next();

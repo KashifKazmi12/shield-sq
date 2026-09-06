@@ -1,82 +1,176 @@
+import Link from "next/link";
 import { requireCompanySession } from "@/lib/session";
 import { resolveProject } from "@/lib/current-project";
-import { listTrivyFindings, getTopOffendingImages } from "@/lib/queries";
-import { prisma } from "@/lib/prisma";
-import { SEVERITIES, DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import {
+  getOverviewStats,
+  getRecentScans,
+  getMeanTimeToFix,
+  getTopCriticalFindings,
+  getTrivyOpenTrend,
+} from "@/lib/queries";
+import { resolveTrendWindow } from "@/lib/trend-range";
+import { formatFindingLifetime } from "@/lib/finding-lifecycle";
 import { DataTable } from "@/components/DataTable";
 import { FilterBar } from "@/components/FilterBar";
-import { TextFilter } from "@/components/TextFilter";
-import { Pagination } from "@/components/Pagination";
-import { TrivyFindingsTable } from "@/components/TrivyFindingsTable";
+import { SeverityBarChart } from "@/components/charts/SeverityBarChart";
+import { SeverityTrendChart } from "@/components/charts/SeverityTrendChart";
+import { TrendRangePicker } from "@/components/TrendRangePicker";
+import { FindingStatusBadge, SeverityBadge, StatusBadge } from "@/components/SeverityBadge";
 
-export default async function TrivyPage({
+export default async function VulnerabilitiesDashboardPage({
   searchParams,
 }: {
-  // Next 16: page-level searchParams is a Promise (Async Request APIs).
   searchParams: Promise<{
     project?: string;
-    severity?: string;
-    repo?: string;
-    fixedStatus?: "fixed" | "unfixed";
-    resource?: string;
-    cursor?: string;
+    status?: string;
+    range?: string;
+    from?: string;
+    to?: string;
   }>;
 }) {
   const { companyId } = await requireCompanySession();
-  const { project: projectParam, severity, repo, fixedStatus, resource, cursor } = await searchParams;
+  const { project: projectParam, status, range, from, to } = await searchParams;
   const project = await resolveProject(companyId, projectParam);
+
   if (!project) {
-    return <p className="muted">No project configured yet.</p>;
+    return (
+      <div>
+        <h2 className="page-title">Vulnerabilities</h2>
+        <p className="muted">No projects yet. Create one and an ingest token in Settings.</p>
+      </div>
+    );
   }
 
-  const [{ findings, nextCursor, total }, topImages, repoRows] = await Promise.all([
-    listTrivyFindings(project.id, {
-      severity,
-      repo,
-      fixedStatus,
-      resource,
-      cursor,
-    }),
-    getTopOffendingImages(project.id),
-    prisma.scan.findMany({
-      where: { projectId: project.id, source: "trivy", repo: { not: null } },
-      select: { repo: true },
-      distinct: ["repo"],
-    }),
+  const window = resolveTrendWindow({ range, from, to });
+  const now = new Date();
+  const projectQs = `?project=${encodeURIComponent(project.id)}`;
+
+  const [stats, trend, mttf, recentScans, topCritical] = await Promise.all([
+    getOverviewStats(project.id, "trivy"),
+    getTrivyOpenTrend(project.id, { from: window.from, to: window.to }),
+    getMeanTimeToFix(project.id),
+    getRecentScans(project.id, { source: "trivy", status }),
+    getTopCriticalFindings(project.id, 10),
   ]);
 
   return (
     <div>
       <h2 className="page-title">Vulnerabilities — {project.name}</h2>
 
+      <div className="card-grid">
+        <div className="card">
+          <div className="stat-label">Health score</div>
+          <div className="stat-value">{stats.healthScore}/100</div>
+        </div>
+        <div className="card">
+          <div className="stat-label">Total findings</div>
+          <div className="stat-value">{stats.totalFindings}</div>
+        </div>
+        <div className="card">
+          <div className="stat-label">Open critical</div>
+          <div className="stat-value">{stats.openCritical}</div>
+        </div>
+        <div className="card">
+          <div className="stat-label">Scans (all time)</div>
+          <div className="stat-value">{stats.totalScans}</div>
+        </div>
+        <div className="card">
+          <div className="stat-label">Mean time to fix</div>
+          <div className="stat-value">{mttf !== null ? `${mttf.toFixed(1)}d` : "—"}</div>
+        </div>
+      </div>
+
       <div className="section card">
-        <h3>Top offending images</h3>
+        <div className="trend-card-header">
+          <h3>Top 10 critical issues</h3>
+          <Link
+            href={`/vulnerabilities/findings${projectQs}&severity=critical`}
+            className="muted"
+            style={{ fontSize: 13 }}
+          >
+            View all →
+          </Link>
+        </div>
         <DataTable
           columns={[
-            { id: "image", header: "Image / target", mobileFullWidth: true },
-            { id: "count", header: "Findings" },
+            { id: "cve", header: "CVE", mobileFullWidth: true },
+            { id: "severity", header: "Severity" },
+            { id: "status", header: "Status" },
+            { id: "lifetime", header: "Lifetime" },
+            { id: "resource", header: "Image / target", mobileFullWidth: true },
+            { id: "repo", header: "Repo" },
+            { id: "detected", header: "Detected", mobileFullWidth: true },
           ]}
-          rows={topImages.map((row) => ({
-            key: row.resource ?? "unknown",
-            cells: [row.resource, row.count],
+          rows={topCritical.map((f) => ({
+            key: f.id,
+            cells: [
+              f.title,
+              <SeverityBadge key="sev" severity={f.severity} />,
+              <FindingStatusBadge key="st" status={f.status} />,
+              formatFindingLifetime(f.openIntervals, now),
+              f.resource ?? "—",
+              f.scan.repo ?? "—",
+              new Date(f.detectedAt).toLocaleString(),
+            ],
           }))}
-          emptyMessage="No data yet."
+          emptyMessage="No open critical findings."
         />
       </div>
 
-      <div className="toolbar">
-        <FilterBar
-          fields={[
-            { name: "severity", label: "Severity", options: SEVERITIES.map((s) => ({ value: s, label: s })) },
-            { name: "repo", label: "Repo", options: repoRows.filter((r) => r.repo).map((r) => ({ value: r.repo as string, label: r.repo as string })) },
-            { name: "fixedStatus", label: "Fix status", options: [{ value: "fixed", label: "Fixed" }, { value: "unfixed", label: "Unfixed" }] },
+      <div className="section card">
+        <h3>Findings by severity</h3>
+        <SeverityBarChart counts={stats.severityCounts} />
+      </div>
+
+      <div className="section card">
+        <div className="trend-card-header">
+          <h3>Severity trend</h3>
+          <TrendRangePicker />
+        </div>
+        <p className="muted" style={{ marginTop: 0, marginBottom: 12, fontSize: 13 }}>
+          Open findings by day (stays counted until resolved; returns on reopen).
+        </p>
+        <SeverityTrendChart data={trend} />
+      </div>
+
+      <div className="section card">
+        <h3>Recent pipeline activity</h3>
+        <div className="toolbar">
+          <FilterBar
+            fields={[
+              {
+                name: "status",
+                label: "Status",
+                options: [
+                  { value: "success", label: "success" },
+                  { value: "warning", label: "warning" },
+                  { value: "failed", label: "failed" },
+                ],
+              },
+            ]}
+          />
+        </div>
+        <DataTable
+          columns={[
+            { id: "repo", header: "Repo", mobileFullWidth: true },
+            { id: "status", header: "Status" },
+            { id: "findings", header: "Findings" },
+            { id: "when", header: "When", mobileFullWidth: true },
           ]}
+          rows={recentScans.map((scan) => ({
+            key: scan.id,
+            cells: [
+              scan.repo ?? "—",
+              <StatusBadge key="st" status={scan.status} />,
+              <Link key="f" href={`/runs/${scan.id}?project=${encodeURIComponent(project.id)}`}>
+                {scan._count.observations}
+              </Link>,
+              scan.createdAt.toLocaleString(),
+            ],
+          }))}
+          emptyMessage="No pipeline activity yet."
         />
-        <TextFilter name="resource" placeholder="Filter by image / target" />
       </div>
-
-      <TrivyFindingsTable findings={findings} />
-      <Pagination nextCursor={nextCursor} pageCount={findings.length} total={total} take={DEFAULT_PAGE_SIZE} />
     </div>
   );
 }
