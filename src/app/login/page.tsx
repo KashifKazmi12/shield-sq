@@ -49,7 +49,7 @@ function LoginForm() {
       <div className="login-card-wrap">
         <div className="login-brand">
           <Logo size={40} className="login-logo-ring" />
-          <span className="login-brand-name">ShieldSQ</span>
+          <span className="login-brand-name">SQSecure</span>
           <span className="login-brand-sub">A product by SecureQuanta</span>
         </div>
 

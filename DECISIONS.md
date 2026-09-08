@@ -1,4 +1,4 @@
-# ShieldSQ — Decisions Needing Your Input
+# SQSecure — Decisions Needing Your Input
 
 Everything below was built with a reasonable default so work wouldn't block,
 per the original brief ("make a reasonable default, note the assumption,
@@ -40,7 +40,7 @@ code, not just config. Grouped by urgency.
    service reading Falco's local output and forwarding to the same generic
    webhook — just not documented here yet).
 
-3. **Hosting target for ShieldSQ itself: container or serverless?** Both
+3. **Hosting target for SQSecure itself: container or serverless?** Both
    paths are now code-ready: `Dockerfile` + `docker-compose.yml` for a
    self-hosted/container target (verified live), or Vercel — Prisma's
    client now builds with the `rhel-openssl-3.0.x` binary target Vercel's

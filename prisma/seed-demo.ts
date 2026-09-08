@@ -232,7 +232,7 @@ async function main() {
     },
   });
 
-  const adminEmail = "admin@shieldsq.local";
+  const adminEmail = "admin@sqsecure.local";
   await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},

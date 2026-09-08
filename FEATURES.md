@@ -1,6 +1,6 @@
-# ShieldSQ — Features & Scope
+# SQSecure — Features & Scope
 
-What ShieldSQ does today, end to end. This is the reference for "is X in scope"
+What SQSecure does today, end to end. This is the reference for "is X in scope"
 questions during review.
 
 ## Purpose
@@ -12,7 +12,7 @@ webhook/API from the client's own pipelines and clusters.
 
 ## Multi-tenancy
 
-ShieldSQ is multi-tenant: every **Company** is an isolated tenant with its own
+SQSecure is multi-tenant: every **Company** is an isolated tenant with its own
 projects, tokens, findings, and users. A **super_admin** operates the
 platform (creates/suspends companies) but belongs to no company itself and
 never sees tenant data; a company's **admin**/**viewer** users only ever see
@@ -300,5 +300,5 @@ in Settings) no longer needs a Settings page at all.
 
 - Multi-cluster Falco deployment automation.
 - Pipeline-blocking logic — Trivy's own `--exit-code`/`--severity` flags
-  handle that; ShieldSQ only reports.
+  handle that; SQSecure only reports.
 - SSO/OAuth wiring — Credentials-only for now, config left extensible.

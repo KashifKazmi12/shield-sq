@@ -1,7 +1,7 @@
 # Reference workflow: run Trivy against the built image and forward results to
-# ShieldSQ. Assumes GitHub Actions — swap for the equivalent steps if the actual
+# SQSecure. Assumes GitHub Actions — swap for the equivalent steps if the actual
 # CI platform differs (see DECISIONS.md).
-name: Trivy scan -> ShieldSQ
+name: Trivy scan -> SQSecure
 
 on:
   push:
@@ -25,12 +25,12 @@ jobs:
           image-ref: sample-app:${{ github.sha }}
           format: json
           output: trivy-results.json
-          exit-code: 0 # ShieldSQ only reports; pipeline-blocking is Trivy's own --exit-code / --severity flags
+          exit-code: 0 # SQSecure only reports; pipeline-blocking is Trivy's own --exit-code / --severity flags
 
-      - name: Forward results to ShieldSQ
+      - name: Forward results to SQSecure
         env:
-          SHIELDSQ_URL: ${{ secrets.SHIELDSQ_INGEST_URL }} # e.g. https://shieldsq.example.com
-          SHIELDSQ_TOKEN: ${{ secrets.SHIELDSQ_INGEST_TOKEN }} # per-project token, created in ShieldSQ Settings
+          SQSECURE_URL: ${{ secrets.SQSECURE_INGEST_URL }} # e.g. https://sqsecure.example.com
+          SQSECURE_TOKEN: ${{ secrets.SQSECURE_INGEST_TOKEN }} # per-project token, created in SQSecure Settings
         run: |
           jq -n \
             --arg repo "${{ github.repository }}" \
@@ -39,9 +39,9 @@ jobs:
             --arg pipeline "${{ github.run_id }}" \
             --slurpfile results trivy-results.json \
             '{meta: {repo: $repo, branch: $branch, commitSha: $commit, pipelineId: $pipeline}, results: $results[0]}' \
-            > shieldsq-payload.json
+            > sqsecure-payload.json
 
-          curl -sS -f -X POST "$SHIELDSQ_URL/api/ingest/trivy" \
-            -H "Authorization: Bearer $SHIELDSQ_TOKEN" \
+          curl -sS -f -X POST "$SQSECURE_URL/api/ingest/trivy" \
+            -H "Authorization: Bearer $SQSECURE_TOKEN" \
             -H "Content-Type: application/json" \
-            --data @shieldsq-payload.json
+            --data @sqsecure-payload.json

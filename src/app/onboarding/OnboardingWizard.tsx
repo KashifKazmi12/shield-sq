@@ -66,7 +66,7 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
     <main style={{ maxWidth: 640, margin: "48px auto", padding: "0 16px 48px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 24 }}>
         <Logo size={34} />
-        <span style={{ fontSize: 20, fontWeight: 700 }}>ShieldSQ</span>
+        <span style={{ fontSize: 20, fontWeight: 700 }}>SQSecure</span>
       </div>
 
       <div className="toolbar" style={{ justifyContent: "center", marginBottom: 20 }}>
@@ -77,7 +77,7 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
 
       {step === "details" && (
         <div className="card">
-          <h1 style={{ fontSize: 16, fontWeight: 600, marginTop: 0 }}>Welcome to ShieldSQ 👋</h1>
+          <h1 style={{ fontSize: 16, fontWeight: 600, marginTop: 0 }}>Welcome to SQSecure 👋</h1>
           <p className="muted" style={{ marginTop: 0 }}>
             Let&apos;s set up your first project. This takes about a minute — you can change any of this
             later in Settings.
@@ -159,7 +159,7 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
               &ldquo;{result.projectName}&rdquo; is ready
             </h1>
             <p className="muted" style={{ marginTop: 0 }}>
-              Use the token and endpoints below to send scan results into ShieldSQ. Nothing needs to be
+              Use the token and endpoints below to send scan results into SQSecure. Nothing needs to be
               uploaded manually once this is wired up — your pipelines push data automatically.
             </p>
 
@@ -179,9 +179,9 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
               Kubernetes cluster (e.g. a Helm values override or sealed secret) — never commit the raw
               token to source control.
             </p>
-            <p style={{ marginBottom: 4, fontSize: 13, fontWeight: 600 }}>SHIELDSQ_INGEST_URL</p>
+            <p style={{ marginBottom: 4, fontSize: 13, fontWeight: 600 }}>SQSECURE_INGEST_URL</p>
             <CodeRow value={baseUrl} />
-            <p style={{ marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>SHIELDSQ_INGEST_TOKEN</p>
+            <p style={{ marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>SQSECURE_INGEST_TOKEN</p>
             <CodeRow value={result.ingestToken} />
           </div>
 
@@ -212,7 +212,7 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
           <div className="card section">
             <h3>Step 3 — Falco (Kubernetes runtime alerts)</h3>
             <p className="muted">
-              Falco alerts reach ShieldSQ through Falcosidekick&apos;s generic webhook output. A ready-to-use
+              Falco alerts reach SQSecure through Falcosidekick&apos;s generic webhook output. A ready-to-use
               Helm values example is at <code>deploy/falcosidekick-values.example.yaml</code> — set its
               webhook address and Authorization header to the values below.
             </p>

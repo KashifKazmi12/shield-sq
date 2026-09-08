@@ -125,7 +125,7 @@ async function sendEmail(to: string, findings: NotifyPayload[]) {
   const lines = findings.map((f) => `[${f.severity.toUpperCase()}] ${f.title}${f.description ? ` — ${f.description}` : ""}`);
 
   await getTransporter().sendMail({
-    from: process.env.SMTP_FROM ?? "ShieldSQ Alerts <alerts@shieldsq.local>",
+    from: process.env.SMTP_FROM ?? "SQSecure Alerts <alerts@sqsecure.local>",
     to,
     subject: severitySummaryLine(findings),
     text: lines.join("\n"),

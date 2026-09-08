@@ -3,7 +3,7 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata = {
-  title: "ShieldSQ",
+  title: "SQSecure",
   description: "Unified security dashboard for Trivy scans and Falco runtime alerts",
 };
 

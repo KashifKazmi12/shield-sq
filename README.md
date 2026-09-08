@@ -1,4 +1,4 @@
-# ShieldSQ
+# SQSecure
 
 **A product by SecureQuanta** — a unified, multi-tenant security dashboard
 that ingests vulnerability scan results from **Trivy** (CI/CD pipelines) and

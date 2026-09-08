@@ -9,7 +9,7 @@ const prisma = new PrismaClient();
 // via the onboarding wizard. For a richer demo dataset (sample company +
 // realistic Trivy/Falco data) instead, run `npx tsx prisma/seed-demo.ts`.
 async function main() {
-  const superAdminEmail = "superadmin@shieldsq.local";
+  const superAdminEmail = "superadmin@sqsecure.local";
   await prisma.user.upsert({
     where: { email: superAdminEmail },
     update: {},

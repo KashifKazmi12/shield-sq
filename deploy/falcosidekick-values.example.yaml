@@ -1,5 +1,5 @@
 # Reference Helm values for falcosidekick (https://github.com/falcosecurity/falcosidekick),
-# forwarding Falco runtime alerts to ShieldSQ's ingest endpoint as a generic
+# forwarding Falco runtime alerts to SQSecure's ingest endpoint as a generic
 # webhook (customConfig) target. Merge into your falco/falcosidekick Helm
 # release values — this file is not applied automatically.
 #
@@ -13,11 +13,11 @@ falcosidekick:
   config:
     customfields: "cluster:my-cluster" # tag alerts with cluster name if running multiple
 
-    # ShieldSQ has no dedicated Falcosidekick output type, so we use the generic
+    # SQSecure has no dedicated Falcosidekick output type, so we use the generic
     # "webhook" output, which POSTs the raw Falco alert JSON as-is — matching
     # what src/lib/falco.ts expects (rule, priority, output, output_fields).
     webhook:
-      address: "https://shieldsq.example.com/api/ingest/falco"
-      customHeaders: "Authorization:Bearer REPLACE_WITH_SHIELDSQ_INGEST_TOKEN"
-      # mintimefailure/maxretry: use falcosidekick's own defaults; ShieldSQ's
+      address: "https://sqsecure.example.com/api/ingest/falco"
+      customHeaders: "Authorization:Bearer REPLACE_WITH_SQSECURE_INGEST_TOKEN"
+      # mintimefailure/maxretry: use falcosidekick's own defaults; SQSecure's
       # per-alert dedupeKey makes retried deliveries safe to replay.

@@ -1,4 +1,4 @@
-# ShieldSQ — Known Gaps
+# SQSecure — Known Gaps
 
 Things that are built but incomplete, simplified, or would break under real
 production load. Not bugs — deliberate scope cuts or shortcuts made to ship
@@ -168,7 +168,7 @@ DECISIONS.md (things that need *your* input) and FEATURES.md (what exists).
   live). The Prisma client is also now built with the binary target Vercel's
   serverless functions need, and a `vercel-build` script exists, so a
   serverless deploy is code-ready too — but no target has actually been
-  picked, no CI pipeline exists for ShieldSQ's own tests, and there's no
+  picked, no CI pipeline exists for SQSecure's own tests, and there's no
   TLS/reverse-proxy story for the self-hosted path.
 - **The app image is large (~1.9GB), not size-optimized.** It ships the full
   production `node_modules` rather than using Next's `output: "standalone"`

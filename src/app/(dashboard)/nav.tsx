@@ -203,7 +203,7 @@ export function TopHeader({
         </button>
         <Logo size={34} />
         <div className="brand-text">
-          <span className="brand-name">ShieldSQ</span>
+          <span className="brand-name">SQSecure</span>
           <span className="brand-sub">A product by SecureQuanta</span>
         </div>
       </div>
