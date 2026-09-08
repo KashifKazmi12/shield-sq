@@ -4,17 +4,16 @@ import { resolveProject } from "@/lib/current-project";
 import {
   getOverviewStats,
   getRecentScans,
-  getMeanTimeToFix,
-  getTopCriticalFindings,
+  getTopVulnerabilities,
   getTrivyOpenTrend,
 } from "@/lib/queries";
-import { resolveTrendWindow } from "@/lib/trend-range";
+import { resolveAlertWindow, chartFromForWindow } from "@/lib/alert-window";
 import { formatFindingLifetime } from "@/lib/finding-lifecycle";
 import { DataTable } from "@/components/DataTable";
 import { FilterBar } from "@/components/FilterBar";
 import { SeverityBarChart } from "@/components/charts/SeverityBarChart";
 import { SeverityTrendChart } from "@/components/charts/SeverityTrendChart";
-import { TrendRangePicker } from "@/components/TrendRangePicker";
+import { DashboardTimePicker } from "@/components/DashboardTimePicker";
 import { FindingStatusBadge, SeverityBadge, StatusBadge } from "@/components/SeverityBadge";
 
 export default async function VulnerabilitiesDashboardPage({
@@ -23,13 +22,13 @@ export default async function VulnerabilitiesDashboardPage({
   searchParams: Promise<{
     project?: string;
     status?: string;
-    range?: string;
+    window?: string;
     from?: string;
     to?: string;
   }>;
 }) {
   const { companyId } = await requireCompanySession();
-  const { project: projectParam, status, range, from, to } = await searchParams;
+  const { project: projectParam, status, window: windowParam, from, to } = await searchParams;
   const project = await resolveProject(companyId, projectParam);
 
   if (!project) {
@@ -41,21 +40,35 @@ export default async function VulnerabilitiesDashboardPage({
     );
   }
 
-  const window = resolveTrendWindow({ range, from, to });
+  const timeWindow = resolveAlertWindow({ window: windowParam, from, to });
+  const trendFrom = chartFromForWindow(timeWindow);
   const now = new Date();
   const projectQs = `?project=${encodeURIComponent(project.id)}`;
+  const timeOpts = {
+    detectedAfter: timeWindow.from ?? undefined,
+    detectedBefore: timeWindow.key === "custom" ? timeWindow.to : undefined,
+  };
 
-  const [stats, trend, mttf, recentScans, topCritical] = await Promise.all([
-    getOverviewStats(project.id, "trivy"),
-    getTrivyOpenTrend(project.id, { from: window.from, to: window.to }),
-    getMeanTimeToFix(project.id),
-    getRecentScans(project.id, { source: "trivy", status }),
-    getTopCriticalFindings(project.id, 10),
+  const [stats, trend, recentScans, topVulnerabilities] = await Promise.all([
+    getOverviewStats(project.id, "trivy", timeOpts),
+    getTrivyOpenTrend(project.id, { from: trendFrom, to: timeWindow.to }),
+    getRecentScans(project.id, {
+      source: "trivy",
+      status,
+      createdAfter: timeOpts.detectedAfter,
+      createdBefore: timeOpts.detectedBefore,
+    }),
+    getTopVulnerabilities(project.id, 5, timeOpts),
   ]);
 
   return (
     <div>
-      <h2 className="page-title">Vulnerabilities — {project.name}</h2>
+      <div className="toolbar" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <h2 className="page-title" style={{ margin: 0 }}>
+          Vulnerabilities — {project.name}
+        </h2>
+        <DashboardTimePicker />
+      </div>
 
       <div className="card-grid">
         <div className="card">
@@ -67,24 +80,22 @@ export default async function VulnerabilitiesDashboardPage({
           <div className="stat-value">{stats.totalFindings}</div>
         </div>
         <div className="card">
-          <div className="stat-label">Open critical</div>
-          <div className="stat-value">{stats.openCritical}</div>
+          <div className="stat-label">Opened / resolved</div>
+          <div className="stat-value">
+            {stats.openFindings} / {stats.resolvedFindings}
+          </div>
         </div>
         <div className="card">
-          <div className="stat-label">Scans (all time)</div>
+          <div className="stat-label">Scans</div>
           <div className="stat-value">{stats.totalScans}</div>
-        </div>
-        <div className="card">
-          <div className="stat-label">Mean time to fix</div>
-          <div className="stat-value">{mttf !== null ? `${mttf.toFixed(1)}d` : "—"}</div>
         </div>
       </div>
 
       <div className="section card">
         <div className="trend-card-header">
-          <h3>Top 10 critical issues</h3>
+          <h3>Top 5 vulnerabilities</h3>
           <Link
-            href={`/vulnerabilities/findings${projectQs}&severity=critical`}
+            href={`/vulnerabilities/findings${projectQs}`}
             className="muted"
             style={{ fontSize: 13 }}
           >
@@ -101,7 +112,7 @@ export default async function VulnerabilitiesDashboardPage({
             { id: "repo", header: "Repo" },
             { id: "detected", header: "Detected", mobileFullWidth: true },
           ]}
-          rows={topCritical.map((f) => ({
+          rows={topVulnerabilities.map((f) => ({
             key: f.id,
             cells: [
               f.title,
@@ -113,7 +124,7 @@ export default async function VulnerabilitiesDashboardPage({
               new Date(f.detectedAt).toLocaleString(),
             ],
           }))}
-          emptyMessage="No open critical findings."
+          emptyMessage="No open vulnerabilities."
         />
       </div>
 
@@ -125,7 +136,9 @@ export default async function VulnerabilitiesDashboardPage({
       <div className="section card">
         <div className="trend-card-header">
           <h3>Severity trend</h3>
-          <TrendRangePicker />
+          <span className="muted" style={{ fontSize: 13 }}>
+            {timeWindow.label}
+          </span>
         </div>
         <p className="muted" style={{ marginTop: 0, marginBottom: 12, fontSize: 13 }}>
           Open findings by day (stays counted until resolved; returns on reopen).
@@ -168,7 +181,7 @@ export default async function VulnerabilitiesDashboardPage({
               scan.createdAt.toLocaleString(),
             ],
           }))}
-          emptyMessage="No pipeline activity yet."
+          emptyMessage="No pipeline activity in this time window."
         />
       </div>
     </div>

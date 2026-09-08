@@ -9,6 +9,8 @@ export type DataTableColumn = {
   mobileFullWidth?: boolean;
   /** Hide the field label in the mobile card (e.g. action buttons). */
   mobileHideLabel?: boolean;
+  /** Optional class on th/td (e.g. narrow detail column). */
+  className?: string;
 };
 
 export type DataTableRow = {
@@ -48,7 +50,9 @@ export function DataTable({
           <thead>
             <tr>
               {columns.map((col) => (
-                <th key={col.id}>{col.header}</th>
+                <th key={col.id} className={col.className}>
+                  {col.header}
+                </th>
               ))}
             </tr>
           </thead>
@@ -60,7 +64,9 @@ export function DataTable({
                 className={onRowClick ? "data-table-row-clickable" : undefined}
               >
                 {columns.map((col, i) => (
-                  <td key={col.id}>{row.cells[i]}</td>
+                  <td key={col.id} className={col.className}>
+                    {row.cells[i]}
+                  </td>
                 ))}
               </tr>
             ))}

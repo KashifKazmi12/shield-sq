@@ -2,12 +2,12 @@ import Link from "next/link";
 import { requireCompanySession } from "@/lib/session";
 import { resolveProject } from "@/lib/current-project";
 import { getOverviewStats, getFindingsTrend, getRecentScans } from "@/lib/queries";
-import { resolveTrendWindow } from "@/lib/trend-range";
+import { resolveAlertWindow, chartFromForWindow } from "@/lib/alert-window";
 import { DataTable } from "@/components/DataTable";
 import { FilterBar } from "@/components/FilterBar";
 import { SeverityBarChart } from "@/components/charts/SeverityBarChart";
 import { SeverityTrendChart } from "@/components/charts/SeverityTrendChart";
-import { TrendRangePicker } from "@/components/TrendRangePicker";
+import { DashboardTimePicker } from "@/components/DashboardTimePicker";
 import { StatusBadge } from "@/components/SeverityBadge";
 
 export default async function RuntimeAlertsDashboardPage({
@@ -16,13 +16,13 @@ export default async function RuntimeAlertsDashboardPage({
   searchParams: Promise<{
     project?: string;
     status?: string;
-    range?: string;
+    window?: string;
     from?: string;
     to?: string;
   }>;
 }) {
   const { companyId } = await requireCompanySession();
-  const { project: projectParam, status, range, from, to } = await searchParams;
+  const { project: projectParam, status, window: windowParam, from, to } = await searchParams;
   const project = await resolveProject(companyId, projectParam);
 
   if (!project) {
@@ -34,17 +34,40 @@ export default async function RuntimeAlertsDashboardPage({
     );
   }
 
-  const window = resolveTrendWindow({ range, from, to });
+  const timeWindow = resolveAlertWindow({ window: windowParam, from, to });
+  const trendFrom = chartFromForWindow(timeWindow);
+  const projectQs = `?project=${encodeURIComponent(project.id)}&window=${encodeURIComponent(timeWindow.key)}${
+    timeWindow.key === "custom" && from && to
+      ? `&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+      : ""
+  }`;
 
   const [stats, trend, recentScans] = await Promise.all([
-    getOverviewStats(project.id, "falco"),
-    getFindingsTrend(project.id, { from: window.from, to: window.to, tool: "falco" }),
-    getRecentScans(project.id, { source: "falco", status }),
+    getOverviewStats(project.id, "falco", {
+      detectedAfter: timeWindow.from ?? undefined,
+      detectedBefore: timeWindow.key === "custom" ? timeWindow.to : undefined,
+    }),
+    getFindingsTrend(project.id, {
+      from: trendFrom,
+      to: timeWindow.to,
+      tool: "falco",
+    }),
+    getRecentScans(project.id, {
+      source: "falco",
+      status,
+      createdAfter: timeWindow.from ?? undefined,
+      createdBefore: timeWindow.key === "custom" ? timeWindow.to : undefined,
+    }),
   ]);
 
   return (
     <div>
-      <h2 className="page-title">Runtime Alerts — {project.name}</h2>
+      <div className="toolbar" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <h2 className="page-title" style={{ margin: 0 }}>
+          Runtime Alerts — {project.name}
+        </h2>
+        <DashboardTimePicker />
+      </div>
 
       <div className="card-grid">
         <div className="card">
@@ -73,13 +96,20 @@ export default async function RuntimeAlertsDashboardPage({
       <div className="section card">
         <div className="trend-card-header">
           <h3>Severity trend</h3>
-          <TrendRangePicker />
+          <span className="muted" style={{ fontSize: 13 }}>
+            {timeWindow.label}
+          </span>
         </div>
         <SeverityTrendChart data={trend} />
       </div>
 
       <div className="section card">
-        <h3>Recent alert activity</h3>
+        <div className="trend-card-header">
+          <h3>Recent alert activity</h3>
+          <Link href={`/runtime-alerts/feed${projectQs}`} className="muted" style={{ fontSize: 13 }}>
+            View all →
+          </Link>
+        </div>
         <div className="toolbar">
           <FilterBar
             fields={[
@@ -114,7 +144,7 @@ export default async function RuntimeAlertsDashboardPage({
               scan.createdAt.toLocaleString(),
             ],
           }))}
-          emptyMessage="No alert activity yet."
+          emptyMessage="No alert activity in this time window."
         />
       </div>
     </div>

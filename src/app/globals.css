@@ -701,6 +701,52 @@ tbody tr:last-child td {
   cursor: pointer;
 }
 
+/* Falco feed: left columns stay compact; Detail gets most of the row. */
+.data-table-desktop th.col-detail,
+.data-table-desktop td.col-detail {
+  width: 52%;
+}
+
+.detail-clip {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  color: var(--fg-muted);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.falco-feed .data-table-desktop {
+  table-layout: fixed;
+}
+
+.falco-feed .data-table-desktop th:nth-child(1),
+.falco-feed .data-table-desktop td:nth-child(1) {
+  width: 14%;
+  min-width: 11.5rem;
+  padding-right: 20px;
+  white-space: nowrap;
+}
+
+.falco-feed .data-table-desktop th:nth-child(2),
+.falco-feed .data-table-desktop td:nth-child(2) {
+  width: 9%;
+  padding-left: 8px;
+}
+
+.falco-feed .data-table-desktop th:nth-child(3),
+.falco-feed .data-table-desktop td:nth-child(3) {
+  width: 16%;
+}
+
+.falco-feed .data-table-desktop th:nth-child(4),
+.falco-feed .data-table-desktop td:nth-child(4) {
+  width: 13%;
+}
+
+
 .data-table-desktop-wrap {
   width: 100%;
   overflow-x: auto;

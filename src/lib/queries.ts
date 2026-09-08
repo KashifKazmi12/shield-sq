@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { SEVERITIES, DEFAULT_PAGE_SIZE } from "./constants";
+import { severityRank } from "./severity";
 import { eachUtcDay, emptySeverityBucket } from "./trend-range";
 import { buildOpenInventoryTrend } from "./finding-lifecycle";
 
@@ -7,12 +8,28 @@ export async function listProjects(companyId: string) {
   return prisma.project.findMany({ where: { companyId }, orderBy: { name: "asc" } });
 }
 
-export async function getSeverityCounts(projectId: string, tool?: "trivy" | "falco") {
+export async function getSeverityCounts(
+  projectId: string,
+  tool?: "trivy" | "falco",
+  options?: { detectedAfter?: Date; detectedBefore?: Date; openOnly?: boolean }
+) {
   const counts = await prisma.finding.groupBy({
     by: ["severity"],
     where: {
       projectId,
       ...(tool ? { tool } : {}),
+      ...(options?.detectedAfter || options?.detectedBefore
+        ? {
+            detectedAt: {
+              ...(options.detectedAfter ? { gte: options.detectedAfter } : {}),
+              ...(options.detectedBefore ? { lte: options.detectedBefore } : {}),
+            },
+          }
+        : {}),
+      // Trivy lifecycle: openOnly = current risk (exclude resolved).
+      ...(options?.openOnly && tool === "trivy"
+        ? { status: { in: ["opened", "reopened"] } }
+        : {}),
     },
     _count: { _all: true },
   });
@@ -24,37 +41,83 @@ export async function getSeverityCounts(projectId: string, tool?: "trivy" | "fal
   return result;
 }
 
-export async function getOverviewStats(projectId: string, tool?: "trivy" | "falco") {
+export async function getOverviewStats(
+  projectId: string,
+  tool?: "trivy" | "falco",
+  options?: { detectedAfter?: Date; detectedBefore?: Date }
+) {
   const findingWhere = {
     projectId,
     ...(tool ? { tool } : {}),
+    ...(options?.detectedAfter || options?.detectedBefore
+      ? {
+          detectedAt: {
+            ...(options.detectedAfter ? { gte: options.detectedAfter } : {}),
+            ...(options.detectedBefore ? { lte: options.detectedBefore } : {}),
+          },
+        }
+      : {}),
   };
-  const [severityCounts, totalFindings, openCritical, totalScans] = await Promise.all([
-    getSeverityCounts(projectId, tool),
-    prisma.finding.count({ where: findingWhere }),
-    prisma.finding.count({
-      where: {
-        ...findingWhere,
-        severity: "critical",
-        ...(tool === "trivy" ? { status: { in: ["opened", "reopened"] } } : {}),
-      },
-    }),
-    prisma.scan.count({
-      where: {
-        projectId,
-        ...(tool ? { source: tool } : {}),
-      },
-    }),
-  ]);
+  const scanWhere = {
+    projectId,
+    ...(tool ? { source: tool } : {}),
+    ...(options?.detectedAfter || options?.detectedBefore
+      ? {
+          createdAt: {
+            ...(options.detectedAfter ? { gte: options.detectedAfter } : {}),
+            ...(options.detectedBefore ? { lte: options.detectedBefore } : {}),
+          },
+        }
+      : {}),
+  };
+  const [severityCounts, healthSeverityCounts, totalFindings, openCritical, openFindings, resolvedFindings, totalScans] =
+    await Promise.all([
+      getSeverityCounts(projectId, tool, options),
+      // Health reflects current open risk for Trivy (resolved no longer hurts the score).
+      tool === "trivy"
+        ? getSeverityCounts(projectId, "trivy", { ...options, openOnly: true })
+        : Promise.resolve(null),
+      prisma.finding.count({ where: findingWhere }),
+      prisma.finding.count({
+        where: {
+          ...findingWhere,
+          severity: "critical",
+          ...(tool === "trivy" ? { status: { in: ["opened", "reopened"] } } : {}),
+        },
+      }),
+      prisma.finding.count({
+        where: {
+          ...findingWhere,
+          ...(tool === "trivy" ? { status: { in: ["opened", "reopened"] } } : {}),
+        },
+      }),
+      tool === "trivy"
+        ? prisma.finding.count({ where: { ...findingWhere, status: "resolved" } })
+        : Promise.resolve(0),
+      prisma.scan.count({ where: scanWhere }),
+    ]);
 
-  const healthScore = computeHealthScore(severityCounts);
+  const healthScore = computeHealthScore(healthSeverityCounts ?? severityCounts);
 
-  return { severityCounts, totalFindings, openCritical, totalScans, healthScore };
+  return {
+    severityCounts,
+    totalFindings,
+    openCritical,
+    openFindings: tool === "trivy" ? openFindings : totalFindings,
+    resolvedFindings,
+    totalScans,
+    healthScore,
+  };
 }
 
 export async function getRecentScans(
   projectId: string,
-  filters: { source?: "trivy" | "falco"; status?: string },
+  filters: {
+    source?: "trivy" | "falco";
+    status?: string;
+    createdAfter?: Date;
+    createdBefore?: Date;
+  },
   limit = 10
 ) {
   return prisma.scan.findMany({
@@ -62,6 +125,14 @@ export async function getRecentScans(
       projectId,
       ...(filters.source ? { source: filters.source } : {}),
       ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.createdAfter || filters.createdBefore
+        ? {
+            createdAt: {
+              ...(filters.createdAfter ? { gte: filters.createdAfter } : {}),
+              ...(filters.createdBefore ? { lte: filters.createdBefore } : {}),
+            },
+          }
+        : {}),
     },
     orderBy: { createdAt: "desc" },
     take: limit,
@@ -181,6 +252,10 @@ export type FindingFilters = {
   resource?: string;
   /** Finding lifecycle status. Default for Trivy: open only (opened + reopened). */
   status?: "opened" | "reopened" | "resolved" | "open" | "all";
+  /** Only findings with detectedAt >= this instant (alert time windows). */
+  detectedAfter?: Date;
+  /** Only findings with detectedAt <= this instant (custom ranges). */
+  detectedBefore?: Date;
   cursor?: string;
   take?: number;
 };
@@ -230,6 +305,14 @@ export async function listFalcoFindings(projectId: string, filters: FindingFilte
     ...(filters.severity ? { severity: filters.severity } : {}),
     ...(filters.ruleName ? { ruleName: filters.ruleName } : {}),
     ...(filters.resource ? { resource: { contains: filters.resource, mode: "insensitive" as const } } : {}),
+    ...(filters.detectedAfter || filters.detectedBefore
+      ? {
+          detectedAt: {
+            ...(filters.detectedAfter ? { gte: filters.detectedAfter } : {}),
+            ...(filters.detectedBefore ? { lte: filters.detectedBefore } : {}),
+          },
+        }
+      : {}),
   };
 
   const [findings, total] = await Promise.all([
@@ -264,21 +347,40 @@ export async function getTopOffendingImages(projectId: string, limit = 5) {
   return grouped.map((g) => ({ resource: g.resource, count: g._count._all }));
 }
 
-/** Open critical Trivy findings, newest first — for the vulnerabilities dashboard. */
-export async function getTopCriticalFindings(projectId: string, limit = 10) {
-  return prisma.finding.findMany({
+/** Open Trivy findings, severity-first (critical → high → medium → low), then newest. */
+export async function getTopVulnerabilities(
+  projectId: string,
+  limit = 5,
+  options?: { detectedAfter?: Date; detectedBefore?: Date }
+) {
+  const findings = await prisma.finding.findMany({
     where: {
       projectId,
       tool: "trivy",
-      severity: "critical",
       status: { in: ["opened", "reopened"] },
+      severity: { in: ["critical", "high", "medium", "low"] },
+      ...(options?.detectedAfter || options?.detectedBefore
+        ? {
+            detectedAt: {
+              ...(options.detectedAfter ? { gte: options.detectedAfter } : {}),
+              ...(options.detectedBefore ? { lte: options.detectedBefore } : {}),
+            },
+          }
+        : {}),
     },
     orderBy: { detectedAt: "desc" },
-    take: limit,
     include: {
       scan: { select: { repo: true } },
     },
   });
+
+  findings.sort((a, b) => {
+    const bySeverity = severityRank(a.severity) - severityRank(b.severity);
+    if (bySeverity !== 0) return bySeverity;
+    return b.detectedAt.getTime() - a.detectedAt.getTime();
+  });
+
+  return findings.slice(0, limit);
 }
 
 export type PipelineRunFilters = {
