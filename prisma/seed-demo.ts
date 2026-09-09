@@ -210,7 +210,12 @@ async function main() {
   const company = await prisma.company.upsert({
     where: { slug: "demo-company" },
     update: {},
-    create: { id: "demo-company", name: "Demo Company", slug: "demo-company" },
+    create: {
+      id: "demo-company",
+      name: "Demo Company",
+      slug: "demo-company",
+      features: ["vulnerabilities", "runtime_alerts"],
+    },
   });
 
   const project = await prisma.project.upsert({
@@ -233,7 +238,7 @@ async function main() {
   });
 
   const adminEmail = "admin@sqsecure.local";
-  await prisma.user.upsert({
+  const admin = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {},
     create: {
@@ -246,6 +251,10 @@ async function main() {
       onboardedAt: new Date(),
     },
   });
+
+  if (!company.ownerId) {
+    await prisma.company.update({ where: { id: company.id }, data: { ownerId: admin.id } });
+  }
 
   // Wipe the demo *data* (scans/findings/notifications/audit log/tokens) so
   // this script is safely re-runnable to reset to a fresh, richer demo

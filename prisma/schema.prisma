@@ -21,15 +21,54 @@ enum Role {
   viewer
 }
 
+// Product areas a company is entitled to. Set by the super admin at company
+// creation (and editable afterward) — gates onboarding wizard content and the
+// sidebar, but never blocks the Trivy/Falco ingest webhooks themselves (a
+// disabled feature hides the UI, it doesn't stop data collection).
+enum CompanyFeature {
+  vulnerabilities
+  runtime_alerts
+  leak_checking
+  url_monitoring
+}
+
+enum LeakIdentifierType {
+  email
+  username
+}
+
+enum MonitorStatus {
+  pending
+  active
+  disabled
+  error
+}
+
+enum LeakProvider {
+  checkleaked
+  leakcheck
+}
+
 model Company {
-  id           String    @id @default(cuid())
+  id           String            @id @default(cuid())
   name         String
-  slug         String    @unique
-  createdAt    DateTime  @default(now())
+  slug         String            @unique
+  createdAt    DateTime          @default(now())
   // Set to block login for every user in this company without deleting data.
   suspendedAt  DateTime?
-  users        User[]
+  features     CompanyFeature[]  @default([])
+  // The single admin the super admin treats as this company's point of
+  // contact — set to the admin created alongside the company, used by
+  // resetCompanyAdminPassword so "reset the admin password" always targets
+  // one specific person even once a company has several admins (see
+  // settings/actions.ts's team management, which allows more than one).
+  ownerId      String?           @unique
+  owner        User?             @relation("CompanyOwner", fields: [ownerId], references: [id])
+  users        User[]            @relation("CompanyUsers")
   projects     Project[]
+  monitoredIdentities MonitoredIdentity[]
+  monitoredSites      MonitoredSite[]
+  leakProviderUsage   LeakProviderUsage[]
 }
 
 model User {
@@ -39,11 +78,15 @@ model User {
   role         Role      @default(viewer)
   // Null only for super_admin — every admin/viewer belongs to one company.
   companyId    String?
-  company      Company?  @relation(fields: [companyId], references: [id])
+  company      Company?  @relation("CompanyUsers", fields: [companyId], references: [id])
+  ownerOfCompany Company? @relation("CompanyOwner")
   createdAt    DateTime  @default(now())
   // Set once the first-login setup wizard is completed. Gates the
   // /onboarding redirect for admins; viewers never see the wizard.
   onboardedAt  DateTime?
+  createdLeakIdentities MonitoredIdentity[]
+  leakProviderUsage     LeakProviderUsage[]
+  updatedLeakProviderConfigs LeakProviderConfig[]
 
   @@index([companyId])
 }
@@ -202,4 +245,158 @@ model AdminAuditLog {
   createdAt  DateTime @default(now())
 
   @@index([companyId, createdAt])
+}
+
+// --- Leak Checking ---------------------------------------------------------
+
+// A monitored email/username, company-scoped (not project-scoped — unlike
+// Trivy/Falco findings, a leaked credential isn't tied to a codebase/repo).
+model MonitoredIdentity {
+  id                String              @id @default(cuid())
+  companyId         String
+  company           Company             @relation(fields: [companyId], references: [id])
+  createdById       String?
+  createdBy         User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  identifierType    LeakIdentifierType
+  identifierValue   String
+  status            MonitorStatus       @default(pending)
+  checkIntervalMins Int                 @default(1440)
+  lastCheckedAt     DateTime?
+  nextCheckAt       DateTime?
+  lastError         String?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  findings          LeakFinding[]
+
+  @@unique([companyId, identifierType, identifierValue])
+  @@index([nextCheckAt])
+}
+
+model LeakFinding {
+  id         String            @id @default(cuid())
+  identityId String
+  identity   MonitoredIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  source     String // "checkleaked" | "leakcheck"
+  breachName String
+  severity   String            @default("medium") // "low" | "medium" | "high" — see computeSeverity()
+  leakedAt   DateTime?
+  // sha256(source + breachName + a stable field from the raw entry) — see
+  // src/lib/leak-providers.ts. Prevents an unbounded number of duplicate
+  // rows when the same identity is re-synced against the same breach.
+  dedupeKey  String
+  // Raw provider entry, with credential-like fields (password) masked
+  // before storage — see maskSecret() in leak-providers.ts. Kept for
+  // severity computation/display, never round-trips a cleartext secret.
+  details    Json?
+  // The real leaked password, encrypted (AES-256-GCM, src/lib/secrets.ts) —
+  // null when the provider didn't return one for this entry. Decrypted only
+  // by revealFindingPassword, on demand, never included in the findings
+  // list payload.
+  passwordCiphertext String?
+  createdAt  DateTime          @default(now())
+
+  @@unique([identityId, dedupeKey])
+  @@index([identityId, source, breachName])
+}
+
+// --- URL Monitoring ---------------------------------------------------------
+
+model MonitoredSite {
+  id        String              @id @default(cuid())
+  companyId String
+  company   Company             @relation(fields: [companyId], references: [id])
+  url       String
+  domain    String
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  endpoints MonitoredEndpoint[]
+  scans     SiteScanResult[]
+
+  @@unique([companyId, url])
+  @@index([companyId, domain])
+}
+
+model MonitoredEndpoint {
+  id        String           @id @default(cuid())
+  siteId    String
+  site      MonitoredSite    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  url       String
+  path      String
+  createdAt DateTime         @default(now())
+  scans     SiteScanResult[]
+
+  @@unique([siteId, url])
+  @@index([siteId])
+}
+
+model SiteScanResult {
+  id         String             @id @default(cuid())
+  siteId     String
+  site       MonitoredSite      @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  endpointId String?
+  endpoint   MonitoredEndpoint? @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  statusCode Int?
+  latencyMs  Float?
+  scannedAt  DateTime           @default(now())
+
+  @@index([siteId, scannedAt])
+  @@index([endpointId, scannedAt])
+}
+
+// --- Leak provider configuration (super admin, platform-level) -------------
+
+// One row per provider — holds the encrypted credential and its position in
+// the fallback try-order. Super-admin-managed via /configuration, not tied
+// to any one company (shared infrastructure across every tenant).
+model LeakProviderConfig {
+  id               String       @id @default(cuid())
+  provider         LeakProvider @unique
+  // AES-256-GCM ciphertext (iv + authTag + ciphertext, base64) — see
+  // src/lib/secrets.ts. Decrypted only inside leak-providers.ts at call
+  // time; never sent to the client.
+  apiKeyCiphertext String?
+  // Computed once at save time (e.g. "5F09••••••••4626") — the only
+  // representation of the key any read of this table ever returns. There is
+  // no "reveal full key" path anywhere in the app, by design.
+  apiKeyPreview    String?
+  priority         Int          @default(1) // lower = tried first; unique across however many providers exist
+  enabled          Boolean      @default(true)
+  // Simple resettable "calls made since last reset" counter, shown directly
+  // on the provider row — separate from LeakProviderUsage (the immutable
+  // audit log powering quota enforcement and the Usage dashboard), which is
+  // never reset. Incremented alongside every LeakProviderUsage write.
+  usageCount       Int          @default(0)
+  updatedAt        DateTime     @updatedAt
+  updatedById      String?
+  updatedBy        User?        @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([priority])
+}
+
+// One row = one outbound provider call attempt — powers both the usage
+// dashboard and quota enforcement (global/company/user), so the two can
+// never drift apart.
+model LeakProviderUsage {
+  id        String       @id @default(cuid())
+  provider  LeakProvider
+  companyId String?
+  company   Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  success   Boolean
+  createdAt DateTime     @default(now())
+
+  @@index([provider, createdAt])
+  @@index([companyId, createdAt])
+  @@index([userId, createdAt])
+}
+
+// Singleton row (id is always "default") holding the three quota knobs — one
+// platform-wide policy in v1, not a per-company override table.
+model LeakProviderLimits {
+  id                   String   @id @default("default")
+  globalDailyLimit     Int?
+  perCompanyDailyLimit Int?
+  perUserDailyLimit    Int?
+  updatedAt            DateTime @updatedAt
 }

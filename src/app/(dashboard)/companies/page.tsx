@@ -11,7 +11,18 @@ export default async function CompaniesPage() {
 
   const companies = await prisma.company.findMany({
     orderBy: { createdAt: "desc" },
-    include: { _count: { select: { users: true, projects: true } } },
+    include: {
+      _count: { select: { users: true, projects: true } },
+      owner: { select: { id: true, email: true } },
+      users: {
+        select: { id: true, email: true, role: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      },
+      projects: {
+        select: { id: true, name: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
 
   return (

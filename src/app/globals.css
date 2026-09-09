@@ -317,16 +317,37 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--fg-muted);
+  width: 100%;
+  padding: 6px 10px 4px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--fg-muted) !important;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  background: transparent !important;
+  border: none !important;
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar-group-label:hover {
+  background: var(--canvas-subtle) !important;
 }
 
 .sidebar-group-label .icon {
   opacity: 0.7;
+}
+
+.sidebar-group-label .chevron {
+  margin-left: auto;
+  opacity: 0.6;
+  transform: rotate(-90deg);
+  transition: transform 0.12s ease;
+}
+
+.sidebar-group-label[aria-expanded="true"] .chevron {
+  transform: rotate(0deg);
 }
 
 .sidebar-group-items {
@@ -694,6 +715,40 @@ tbody tr:last-child td {
 
 .data-table-empty {
   margin: 0;
+}
+
+/* ---------- companies tree table ---------- */
+
+.tree-toggle {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  color: var(--fg-muted) !important;
+}
+
+.tree-toggle:hover {
+  background: var(--canvas-subtle) !important;
+  border-radius: var(--radius);
+}
+
+.company-detail-row > td {
+  background: var(--canvas-subtle);
+  padding: 14px 16px;
+}
+
+.company-detail-row table {
+  background: var(--canvas-default);
+}
+
+.company-detail-row table th,
+.company-detail-row table td {
+  font-size: 12px;
+  padding: 6px 10px;
 }
 
 .data-table-row-clickable {
@@ -1201,7 +1256,7 @@ button:disabled {
 .drawer {
   display: flex;
   flex-direction: column;
-  width: min(440px, 100vw);
+  width: min(720px, 100vw);
   height: 100%;
   max-height: 100dvh;
   background: var(--canvas-default);
@@ -1739,5 +1794,36 @@ pre {
 
   .subtab {
     margin-right: 12px;
+  }
+}
+
+.brand-badge {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 30;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--canvas-default);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.brand-badge:hover {
+  transform: scale(1.06);
+}
+
+@media (max-width: 640px) {
+  .brand-badge {
+    width: 52px;
+    height: 52px;
+    right: 12px;
+    bottom: 12px;
   }
 }

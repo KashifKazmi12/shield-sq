@@ -24,13 +24,13 @@ const COLORS: Record<string, string> = {
 
 const SEVERITY_KEYS = Object.keys(COLORS);
 
-function SeverityLegend({ payload }: Pick<LegendProps, "payload">) {
+function SeverityLegend({ payload, colors }: Pick<LegendProps, "payload"> & { colors: Record<string, string> }) {
   if (!payload?.length) return null;
   return (
     <ul className="severity-legend">
       {payload.map((entry) => {
         const key = String(entry.value);
-        const color = COLORS[key] ?? "#6e7781";
+        const color = colors[key] ?? "#6e7781";
         return (
           <li key={key}>
             <span className="severity-legend-swatch" style={{ backgroundColor: color }} />
@@ -42,7 +42,18 @@ function SeverityLegend({ payload }: Pick<LegendProps, "payload">) {
   );
 }
 
-export function SeverityTrendChart({ data }: { data: Array<Record<string, string | number>> }) {
+export function SeverityTrendChart({
+  data,
+  keys,
+  colors,
+}: {
+  data: Array<Record<string, string | number>>;
+  /** Restrict which series render — a domain with fewer severities (e.g. leak findings: no critical/info) shouldn't show phantom empty swatches. */
+  keys?: string[];
+  colors?: Record<string, string>;
+}) {
+  const seriesKeys = keys ?? SEVERITY_KEYS;
+  const palette = colors ?? COLORS;
   const hasActivity = data.some((row) =>
     Object.entries(row).some(([key, value]) => key !== "date" && Number(value) > 0)
   );
@@ -66,14 +77,14 @@ export function SeverityTrendChart({ data }: { data: Array<Record<string, string
             cursor={{ fill: "#f6f8fa" }}
             contentStyle={{ background: "#ffffff", border: "1px solid #d0d7de", borderRadius: 6, fontSize: 12 }}
           />
-          <Legend content={(props) => <SeverityLegend payload={props.payload} />} />
-          {SEVERITY_KEYS.map((severity) => (
+          <Legend content={(props) => <SeverityLegend payload={props.payload} colors={palette} />} />
+          {seriesKeys.map((severity, i) => (
             <Bar
               key={severity}
               dataKey={severity}
               stackId="1"
-              fill={COLORS[severity]}
-              radius={severity === "info" ? [4, 4, 0, 0] : undefined}
+              fill={palette[severity]}
+              radius={i === seriesKeys.length - 1 ? [4, 4, 0, 0] : undefined}
             />
           ))}
         </BarChart>
@@ -83,8 +94,8 @@ export function SeverityTrendChart({ data }: { data: Array<Record<string, string
           <XAxis dataKey="date" stroke="#656d76" fontSize={11} />
           <YAxis stroke="#656d76" fontSize={11} allowDecimals={false} />
           <Tooltip contentStyle={{ background: "#ffffff", border: "1px solid #d0d7de", borderRadius: 6, fontSize: 12 }} />
-          <Legend content={(props) => <SeverityLegend payload={props.payload} />} />
-          {SEVERITY_KEYS.map((severity) => (
+          <Legend content={(props) => <SeverityLegend payload={props.payload} colors={palette} />} />
+          {seriesKeys.map((severity) => (
             <Area
               key={severity}
               type="monotone"
@@ -92,7 +103,7 @@ export function SeverityTrendChart({ data }: { data: Array<Record<string, string
               stackId="1"
               stroke="#ffffff"
               strokeWidth={2}
-              fill={COLORS[severity]}
+              fill={palette[severity]}
               fillOpacity={0.85}
             />
           ))}

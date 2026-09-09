@@ -7,27 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateIngestToken, hashToken, generateTempPassword } from "@/lib/token";
 import { logAdminAction } from "@/lib/audit";
-
-async function requireAdmin() {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user?.role !== "admin" || !session.user.companyId || !session.user.id) {
-    throw new Error("Forbidden: admin role required");
-  }
-  return {
-    companyId: session.user.companyId as string,
-    userId: session.user.id as string,
-    email: session.user.email as string,
-  };
-}
-
-// Every mutation below re-checks that the target project actually belongs
-// to the calling admin's own company — the admin role check alone isn't
-// enough once a project id could belong to a different tenant.
-async function requireOwnedProject(projectId: string, companyId: string) {
-  const project = await prisma.project.findFirst({ where: { id: projectId, companyId } });
-  if (!project) throw new Error("Forbidden: project does not belong to your company");
-  return project;
-}
+import { requireAdmin, requireOwnedProject } from "@/lib/rbac";
 
 export async function createIngestToken(projectId: string, label: string) {
   const { companyId, email } = await requireAdmin();

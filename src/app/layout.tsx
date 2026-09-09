@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Providers } from "./providers";
+import { SecureQuantaBadge } from "@/components/SecureQuantaBadge";
 import "./globals.css";
 
 export const metadata = {
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <Providers>{children}</Providers>
+        <SecureQuantaBadge />
       </body>
     </html>
   );

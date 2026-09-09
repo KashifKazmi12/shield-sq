@@ -13,6 +13,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
 
   const role = session.user?.role;
   let companyName: string | null = null;
+  let features: string[] = [];
   let projects: { id: string; name: string }[] = [];
   let defaultProjectId: string | undefined;
 
@@ -28,7 +29,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     const companyId = session.user.companyId;
     const company = await prisma.company.findUnique({
       where: { id: companyId },
-      select: { name: true, suspendedAt: true },
+      select: { name: true, suspendedAt: true, features: true },
     });
     // A suspension made after this JWT was issued can't be reflected in the
     // token itself — checked fresh here on every dashboard page load so a
@@ -36,6 +37,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     // blocked from their *next* login.
     if (company?.suspendedAt) redirect("/login?suspended=1");
     companyName = company?.name ?? null;
+    features = company?.features ?? [];
 
     const [projectList, defaultProject] = await Promise.all([
       listProjects(companyId),
@@ -73,6 +75,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           defaultProjectId={defaultProjectId}
           role={role}
           companyName={companyName}
+          features={features}
         >
           {children}
         </DashboardShell>

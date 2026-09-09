@@ -18,7 +18,9 @@ function CodeRow({ value }: { value: string }) {
   );
 }
 
-export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
+export function OnboardingWizard({ baseUrl, features }: { baseUrl: string; features: string[] }) {
+  const hasVulnerabilities = features.includes("vulnerabilities");
+  const hasRuntimeAlerts = features.includes("runtime_alerts");
   const router = useRouter();
   const [step, setStep] = useState<Step>("details");
   const [result, setResult] = useState<OnboardingResult | null>(null);
@@ -61,6 +63,13 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
 
   const trivyUrl = `${baseUrl}/api/ingest/trivy`;
   const falcoUrl = `${baseUrl}/api/ingest/falco`;
+
+  // Step numbering after "Step 1 — Store the token" adapts to which
+  // pipelines this company is actually entitled to (see requireCompanyFeature).
+  let nextStep = 2;
+  const trivyStepNum = hasVulnerabilities ? nextStep++ : nextStep;
+  const falcoStepNum = hasRuntimeAlerts ? nextStep++ : nextStep;
+  const verifyStepNum = nextStep;
 
   return (
     <main style={{ maxWidth: 640, margin: "48px auto", padding: "0 16px 48px" }}>
@@ -185,54 +194,68 @@ export function OnboardingWizard({ baseUrl }: { baseUrl: string }) {
             <CodeRow value={result.ingestToken} />
           </div>
 
-          <div className="card section">
-            <h3>Step 2 — Trivy (CI/CD pipeline)</h3>
-            <p className="muted">
-              Point your CI job at the Trivy ingest endpoint after running a scan. A ready-to-use
-              GitHub Actions example is at <code>.github/workflows/trivy-scan.yml</code> — swap the
-              build/test steps for your own, keep the last step as-is.
-            </p>
-            <p className="muted" style={{ background: "var(--canvas-subtle)", border: "1px solid var(--border-muted)", borderRadius: 6, padding: "8px 10px" }}>
-              <strong>Repo, branch, commit, and pipeline ID won&apos;t show up</strong> unless you wrap
-              Trivy&apos;s own JSON output like this — Trivy itself has no concept of git or CI, so that
-              context has to come from your pipeline:
-              <br />
-              <code>{`{ "meta": { "repo", "branch", "commitSha", "pipelineId" }, "results": <raw trivy JSON> }`}</code>
-              <br />
-              The reference GitHub Actions workflow above already does this for you.
-            </p>
-            <p style={{ marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Endpoint</p>
-            <CodeRow value={`POST ${trivyUrl}`} />
-            <p style={{ marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>Quick local test</p>
-            <CodeRow
-              value={`curl -X POST ${trivyUrl} \\\n  -H "Authorization: Bearer ${result.ingestToken}" \\\n  -H "Content-Type: application/json" \\\n  --data @fixtures/trivy-sample.json`}
-            />
-          </div>
+          {hasVulnerabilities && (
+            <div className="card section">
+              <h3>Step {trivyStepNum} — Trivy (CI/CD pipeline)</h3>
+              <p className="muted">
+                Point your CI job at the Trivy ingest endpoint after running a scan. A ready-to-use
+                GitHub Actions example is at <code>.github/workflows/trivy-scan.yml</code> — swap the
+                build/test steps for your own, keep the last step as-is.
+              </p>
+              <p className="muted" style={{ background: "var(--canvas-subtle)", border: "1px solid var(--border-muted)", borderRadius: 6, padding: "8px 10px" }}>
+                <strong>Repo, branch, commit, and pipeline ID won&apos;t show up</strong> unless you wrap
+                Trivy&apos;s own JSON output like this — Trivy itself has no concept of git or CI, so that
+                context has to come from your pipeline:
+                <br />
+                <code>{`{ "meta": { "repo", "branch", "commitSha", "pipelineId" }, "results": <raw trivy JSON> }`}</code>
+                <br />
+                The reference GitHub Actions workflow above already does this for you.
+              </p>
+              <p style={{ marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Endpoint</p>
+              <CodeRow value={`POST ${trivyUrl}`} />
+              <p style={{ marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>Quick local test</p>
+              <CodeRow
+                value={`curl -X POST ${trivyUrl} \\\n  -H "Authorization: Bearer ${result.ingestToken}" \\\n  -H "Content-Type: application/json" \\\n  --data @fixtures/trivy-sample.json`}
+              />
+            </div>
+          )}
+
+          {hasRuntimeAlerts && (
+            <div className="card section">
+              <h3>Step {falcoStepNum} — Falco (Kubernetes runtime alerts)</h3>
+              <p className="muted">
+                Falco alerts reach SQSecure through Falcosidekick&apos;s generic webhook output. A ready-to-use
+                Helm values example is at <code>deploy/falcosidekick-values.example.yaml</code> — set its
+                webhook address and Authorization header to the values below.
+              </p>
+              <p style={{ marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Endpoint</p>
+              <CodeRow value={`POST ${falcoUrl}`} />
+              <p style={{ marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>Authorization header</p>
+              <CodeRow value={`Authorization: Bearer ${result.ingestToken}`} />
+              <p style={{ marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>Quick local test</p>
+              <CodeRow
+                value={`curl -X POST ${falcoUrl} \\\n  -H "Authorization: Bearer ${result.ingestToken}" \\\n  -H "Content-Type: application/json" \\\n  --data @fixtures/falco-sample.json`}
+              />
+            </div>
+          )}
 
           <div className="card section">
-            <h3>Step 3 — Falco (Kubernetes runtime alerts)</h3>
-            <p className="muted">
-              Falco alerts reach SQSecure through Falcosidekick&apos;s generic webhook output. A ready-to-use
-              Helm values example is at <code>deploy/falcosidekick-values.example.yaml</code> — set its
-              webhook address and Authorization header to the values below.
-            </p>
-            <p style={{ marginBottom: 4, fontSize: 13, fontWeight: 600 }}>Endpoint</p>
-            <CodeRow value={`POST ${falcoUrl}`} />
-            <p style={{ marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>Authorization header</p>
-            <CodeRow value={`Authorization: Bearer ${result.ingestToken}`} />
-            <p style={{ marginBottom: 4, marginTop: 12, fontSize: 13, fontWeight: 600 }}>Quick local test</p>
-            <CodeRow
-              value={`curl -X POST ${falcoUrl} \\\n  -H "Authorization: Bearer ${result.ingestToken}" \\\n  -H "Content-Type: application/json" \\\n  --data @fixtures/falco-sample.json`}
-            />
-          </div>
-
-          <div className="card section">
-            <h3>Step 4 — Verify</h3>
-            <p className="muted" style={{ marginBottom: 12 }}>
-              Once your pipeline (or the test command above) has posted at least once, findings will
-              show up on the Vulnerabilities and Runtime Alerts dashboards. You can always create more tokens per
-              project, or revoke this one, from Settings.
-            </p>
+            <h3>Step {verifyStepNum} — Verify</h3>
+            {hasVulnerabilities || hasRuntimeAlerts ? (
+              <p className="muted" style={{ marginBottom: 12 }}>
+                Once your pipeline (or the test command above) has posted at least once, findings will
+                show up on the {[hasVulnerabilities && "Vulnerabilities", hasRuntimeAlerts && "Runtime Alerts"]
+                  .filter(Boolean)
+                  .join(" and ")}{" "}
+                dashboard{hasVulnerabilities && hasRuntimeAlerts ? "s" : ""}. You can always create more tokens
+                per project, or revoke this one, from Settings.
+              </p>
+            ) : (
+              <p className="muted" style={{ marginBottom: 12 }}>
+                Your company doesn&apos;t have any dashboards enabled yet — ask your platform admin to
+                enable Vulnerabilities and/or Runtime Alerts for your company.
+              </p>
+            )}
             <div className="toolbar" style={{ justifyContent: "flex-end", marginBottom: 0 }}>
               <button onClick={handleFinish}>Go to dashboard</button>
             </div>

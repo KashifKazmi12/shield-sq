@@ -161,6 +161,80 @@ DECISIONS.md (things that need *your* input) and FEATURES.md (what exists).
   deployment (connection pooling, multiple replicas, real network latency),
   and wasn't run against Vercel's serverless path at all.
 
+## Leak Checking & URL Monitoring
+
+Built per
+[SPEC_LEAK_CHECKING_URL_MONITORING.md](SPEC_LEAK_CHECKING_URL_MONITORING.md)
+(see FEATURES.md for what exists). What's deliberately left out of v1:
+
+- **No automatic scheduling.** Leak checks and site rescans only run on
+  demand (create/manual-sync actions, and "Try it" for providers) — there's
+  no cron-equivalent sweep that automatically re-checks a `MonitoredIdentity`
+  on its `checkIntervalMins` schedule or re-scans every `MonitoredSite`
+  daily, the way the reference implementation's Celery Beat jobs do.
+  Deferred because SecuQ has no task queue/scheduler infrastructure today
+  (ingestion is synchronous, notifications send inline) and adding one is a
+  bigger, separate decision than these two features needed to unblock v1.
+  The check-and-reschedule logic already lives in standalone functions
+  (`checkIdentity` in `leak-providers.ts`, `discoverAndScanSite`/`rescanSite`
+  in `url-monitor.ts`) specifically so a future scheduler can call the exact
+  same code path instead of duplicating it. When it's time to build this:
+  - Two protected route handlers, `src/app/api/cron/leak-checks/route.ts`
+    and `src/app/api/cron/url-rescans/route.ts`, each requiring a bearer
+    token matching a new `CRON_SECRET` env var (single shared secret, not
+    per-project — the route processes every due row across all companies in
+    one pass, there's nothing per-tenant to scope).
+  - **Vercel deployments**: a new `vercel.json` with a `crons` array —
+    hourly for leak checks (`checkIntervalMins` can be far shorter than a
+    day), daily for URL rescans (matching the reference's actual cadence).
+    Vercel signs cron requests with a bearer token automatically when
+    `CRON_SECRET` is set in project env vars, so the same variable name
+    doubles as the auth check with no extra code.
+  - **Docker/self-hosted deployments**: no new container — a `curl`-based
+    crontab entry documented in the deploy README (e.g. `0 * * * * curl -H
+    "Authorization: Bearer $CRON_SECRET" http://app:3000/api/cron/leak-checks`),
+    mirroring how Falco/Trivy already reach SecuQ purely over HTTP from
+    outside the app process.
+  - **Due-selection logic** (leak checks): `WHERE status IN (active,
+    pending, error) AND (nextCheckAt <= now() OR nextCheckAt IS NULL)`, then
+    reuse `checkIdentity` — not a separate implementation — respecting the
+    same per-provider rate limit used for bulk sync, with a per-invocation
+    cap (e.g. 200 identities per cron hit) so one slow run can't overlap
+    the next trigger.
+  - **URL rescans**: every site + every already-known endpoint gets one
+    fresh `SiteScanResult`; no new discovery during the sweep (discovery
+    only happens at site-creation time or via the manual "discover
+    endpoints" action).
+- **No per-company numeric limits** (e.g. "max 10 monitored identities") —
+  just the boolean feature flag, like Vulnerabilities/Runtime Alerts. No
+  `Plan`/billing model exists in SecuQ to hang a cap off of yet.
+- **No notifications for new leak findings or site-down events.** Ships
+  dashboard-only (view in-app); Vulnerabilities/Runtime Alerts' Slack/email
+  alerting (`NotificationConfig`) is per-project, and these two features
+  aren't project-scoped, so wiring this up means a new company-level
+  notify config, not a repurposing of the existing one.
+- **The outbound provider rate limiter and the 60-second provider-config
+  cache are both in-memory/per-process** (`checkRateLimit`,
+  `leak-providers.ts`'s `configCache`) — same caveat as the ingestion rate
+  limiter above: meaningless across multiple instances/replicas or on
+  serverless, where concurrent invocations don't share memory. A saved key
+  rotation is invalidated immediately (the cache is cleared on every
+  Configuration save action), so the 60s window only matters for
+  already-loaded config during a bulk sync, not for a just-rotated key.
+- **The provider list is code, not data** — `PROVIDER_REGISTRY` in
+  `leak-providers.ts` is architected so adding a 3rd–6th provider is small
+  (one enum value + migration, one call function, one registry entry), but
+  it's still a code change + deploy, not a no-code "add any provider via
+  the UI" system. The Configuration UI only ever manages providers already
+  in the registry.
+- **No test coverage for the provider fallback chain, quota enforcement, or
+  the Configuration server actions** — only the pure helpers are tested
+  (`computeSeverity`, `maskSecret`, `extractSameDomainLinks`,
+  `encryptSecret`/`decryptSecret`). Same category of gap as the rest of
+  Testing below: exercising the real fallback/quota logic needs a mocked
+  Prisma/network context, a bigger lift than the pure-function tests that
+  exist today.
+
 ## Operational readiness
 
 - **No hosting target chosen yet.** A `Dockerfile` + `docker-compose.yml`

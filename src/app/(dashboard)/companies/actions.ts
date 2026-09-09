@@ -1,17 +1,14 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getServerSession } from "next-auth";
 import bcrypt from "bcryptjs";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateTempPassword } from "@/lib/token";
+import { requireSuperAdmin } from "@/lib/rbac";
+import type { CompanyFeature } from "@prisma/client";
 
-async function requireSuperAdmin() {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user?.role !== "super_admin") {
-    throw new Error("Forbidden: super admin role required");
-  }
+function validateFeatures(features: CompanyFeature[]) {
+  if (!features.length) throw new Error("Select at least one feature");
 }
 
 function slugify(name: string) {
@@ -37,6 +34,7 @@ export async function createCompany(input: {
   companyName: string;
   adminEmail: string;
   adminPassword: string;
+  features: CompanyFeature[];
 }) {
   await requireSuperAdmin();
 
@@ -45,6 +43,7 @@ export async function createCompany(input: {
   if (!companyName) throw new Error("Company name is required");
   if (!adminEmail) throw new Error("Admin email is required");
   if (input.adminPassword.length < 8) throw new Error("Temporary password must be at least 8 characters");
+  validateFeatures(input.features);
 
   const existingUser = await prisma.user.findUnique({ where: { email: adminEmail } });
   if (existingUser) throw new Error("A user with that email already exists");
@@ -56,14 +55,30 @@ export async function createCompany(input: {
     data: {
       name: companyName,
       slug,
+      features: input.features,
       users: {
         create: { email: adminEmail, passwordHash, role: "admin" },
       },
     },
+    include: { users: true },
+  });
+
+  // The admin just created becomes this company's owner — the one account
+  // resetCompanyAdminPassword targets, even after more admins are added.
+  await prisma.company.update({
+    where: { id: company.id },
+    data: { ownerId: company.users[0].id },
   });
 
   revalidatePath("/companies");
   return { companyId: company.id, companyName: company.name, adminEmail };
+}
+
+export async function updateCompanyFeatures(companyId: string, features: CompanyFeature[]) {
+  await requireSuperAdmin();
+  validateFeatures(features);
+  await prisma.company.update({ where: { id: companyId }, data: { features } });
+  revalidatePath("/companies");
 }
 
 export async function suspendCompany(companyId: string) {
@@ -81,20 +96,33 @@ export async function reactivateCompany(companyId: string) {
 // Covers the "forgotten password" ops case without a full email-based
 // self-service reset flow (see DECISIONS.md): the super admin resets a
 // company's admin password here, on demand, and hands the new one over
-// out of band. Targets the first admin user found for the company — a
-// company can now have several (see settings/actions.ts's team management),
-// so this resets *an* admin, not necessarily a specific one; fine for the
-// common one-admin-per-company case, worth revisiting once that's not rare.
+// out of band. A company can have several admins (settings/actions.ts's team
+// management), so this targets the designated owner specifically, not
+// whichever admin happens to be found first.
 export async function resetCompanyAdminPassword(companyId: string) {
   await requireSuperAdmin();
 
-  const admin = await prisma.user.findFirst({ where: { companyId, role: "admin" } });
-  if (!admin) throw new Error("This company has no admin user to reset");
+  const company = await prisma.company.findUnique({ where: { id: companyId }, include: { owner: true } });
+  const owner = company?.owner;
+  if (!owner) throw new Error("This company has no owner to reset — set one first");
 
   const newPassword = generateTempPassword();
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await prisma.user.update({ where: { id: admin.id }, data: { passwordHash } });
+  await prisma.user.update({ where: { id: owner.id }, data: { passwordHash } });
 
   revalidatePath("/companies");
-  return { adminEmail: admin.email, newPassword };
+  return { adminEmail: owner.email, newPassword };
+}
+
+// Lets the super admin repoint "company owner" at a different existing admin
+// (e.g. the original owner left) — must be an admin already in this company,
+// not an arbitrary user.
+export async function setCompanyOwner(companyId: string, userId: string) {
+  await requireSuperAdmin();
+
+  const user = await prisma.user.findFirst({ where: { id: userId, companyId, role: "admin" } });
+  if (!user) throw new Error("User must be an admin in this company");
+
+  await prisma.company.update({ where: { id: companyId }, data: { ownerId: userId } });
+  revalidatePath("/companies");
 }

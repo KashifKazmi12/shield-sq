@@ -10,7 +10,15 @@ const COLORS: Record<string, string> = {
   info: "#6e7781",
 };
 
-export function SeverityBarChart({ counts }: { counts: Record<string, number> }) {
+export function SeverityBarChart({
+  counts,
+  colors,
+}: {
+  counts: Record<string, number>;
+  /** Override the default severity color map — lets this double as a generic category bar chart. */
+  colors?: Record<string, string>;
+}) {
+  const palette = colors ?? COLORS;
   const data = Object.entries(counts).map(([severity, count]) => ({ severity, count }));
 
   return (
@@ -25,7 +33,7 @@ export function SeverityBarChart({ counts }: { counts: Record<string, number> })
         />
         <Bar dataKey="count" radius={[4, 4, 0, 0]}>
           {data.map((entry) => (
-            <Cell key={entry.severity} fill={COLORS[entry.severity] ?? "#6e7781"} />
+            <Cell key={entry.severity} fill={palette[entry.severity] ?? "#6e7781"} />
           ))}
         </Bar>
       </BarChart>

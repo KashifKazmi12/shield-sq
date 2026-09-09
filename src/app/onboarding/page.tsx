@@ -30,10 +30,10 @@ export default async function OnboardingPage() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { onboardedAt: true, company: { select: { suspendedAt: true } } },
+    select: { onboardedAt: true, company: { select: { suspendedAt: true, features: true } } },
   });
   if (user?.company?.suspendedAt) redirect("/login?suspended=1");
   if (user?.onboardedAt) redirect("/vulnerabilities");
 
-  return <OnboardingWizard baseUrl={await resolveBaseUrl()} />;
+  return <OnboardingWizard baseUrl={await resolveBaseUrl()} features={user?.company?.features ?? []} />;
 }

@@ -41,30 +41,42 @@ function inRange(day: string, start: string | null, end: string | null) {
 }
 
 /** Page-level time filter: 1m / 5m / 1h / 24h / 7d / all time / custom. */
-export function DashboardTimePicker() {
+export function DashboardTimePicker({
+  minPreset,
+}: {
+  /** Hide presets shorter than this — e.g. URL Monitoring has nothing meaningful to show at 1m/5m. */
+  minPreset?: AlertWindowPresetKey;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { push, isPending } = usePendingRouter();
   const rootRef = useRef<HTMLDivElement>(null);
 
+  const minIndex = minPreset ? ALERT_WINDOWS.findIndex((p) => p.key === minPreset) : 0;
+  const visibleWindows = minIndex > 0 ? ALERT_WINDOWS.slice(minIndex) : ALERT_WINDOWS;
+
   const windowParam = searchParams.get("window") ?? "all";
   const fromParam = searchParams.get("from");
   const toParam = searchParams.get("to");
 
+  const isTooFine = ALERT_WINDOWS.some((p) => p.key === windowParam) && !visibleWindows.some((p) => p.key === windowParam);
+
   const activeKey: AlertWindowKey =
     windowParam === "custom" ||
-    (!ALERT_WINDOWS.some((p) => p.key === windowParam) && fromParam && toParam)
+    (!visibleWindows.some((p) => p.key === windowParam) && !isTooFine && fromParam && toParam)
       ? "custom"
-      : ALERT_WINDOWS.some((p) => p.key === windowParam)
-        ? (windowParam as AlertWindowPresetKey)
-        : "all";
+      : isTooFine
+        ? visibleWindows[0].key
+        : visibleWindows.some((p) => p.key === windowParam)
+          ? (windowParam as AlertWindowPresetKey)
+          : "all";
 
   const triggerLabel = useMemo(() => {
     if (activeKey === "custom" && fromParam && toParam) {
       return `${fromParam} → ${toParam}`;
     }
-    return ALERT_WINDOWS.find((p) => p.key === activeKey)?.label ?? "All time";
-  }, [activeKey, fromParam, toParam]);
+    return visibleWindows.find((p) => p.key === activeKey)?.label ?? "All time";
+  }, [activeKey, fromParam, toParam, visibleWindows]);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [calendarOpen, setCalendarOpen] = useState(false);
@@ -190,7 +202,7 @@ export function DashboardTimePicker() {
 
       {menuOpen && (
         <div className="trend-range-menu" role="listbox">
-          {ALERT_WINDOWS.map((p) => (
+          {visibleWindows.map((p) => (
             <button
               key={p.key}
               type="button"

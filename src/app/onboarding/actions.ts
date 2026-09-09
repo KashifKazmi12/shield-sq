@@ -1,18 +1,9 @@
 "use server";
 
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateIngestToken, hashToken } from "@/lib/token";
 import { SEVERITIES } from "@/lib/constants";
-
-async function requireAdminSession() {
-  const session = await getServerSession(authOptions);
-  if (!session || session.user?.role !== "admin" || !session.user.id || !session.user.companyId) {
-    throw new Error("Forbidden: admin role required");
-  }
-  return session;
-}
+import { requireAdmin } from "@/lib/rbac";
 
 export type OnboardingResult = {
   projectId: string;
@@ -26,7 +17,7 @@ export async function completeOnboarding(input: {
   notifyEmail: string;
   severityThreshold: string;
 }): Promise<OnboardingResult> {
-  const session = await requireAdminSession();
+  const { companyId, userId } = await requireAdmin();
 
   const projectName = input.projectName.trim();
   if (!projectName) throw new Error("Project name is required");
@@ -40,7 +31,7 @@ export async function completeOnboarding(input: {
   const project = await prisma.project.create({
     data: {
       name: projectName,
-      companyId: session.user!.companyId as string,
+      companyId,
       tokens: {
         create: { tokenHash: hashToken(rawToken), label: "initial-setup" },
       },
@@ -55,7 +46,7 @@ export async function completeOnboarding(input: {
   });
 
   await prisma.user.update({
-    where: { id: session.user!.id },
+    where: { id: userId },
     data: { onboardedAt: new Date() },
   });
 
@@ -63,9 +54,9 @@ export async function completeOnboarding(input: {
 }
 
 export async function skipOnboarding() {
-  const session = await requireAdminSession();
+  const { userId } = await requireAdmin();
   await prisma.user.update({
-    where: { id: session.user!.id },
+    where: { id: userId },
     data: { onboardedAt: new Date() },
   });
 }

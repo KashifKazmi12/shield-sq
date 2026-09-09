@@ -34,11 +34,14 @@ type NavSection = {
   items: NavItem[];
   /** Hide entire section for these roles. */
   hideForRoles?: string[];
+  /** Hide entire section unless the company has this feature enabled. */
+  feature?: string;
 };
 
 const companySections: NavSection[] = [
   {
     label: "Vulnerabilities",
+    feature: "vulnerabilities",
     icon: (
       <Icon>
         <path d="M8 .585 1 3.5v4.25c0 4.02 2.98 7.66 7 8.665 4.02-1.005 7-4.645 7-8.665V3.5Zm0 1.634 5.5 2.291v3.24c0 3.24-2.26 6.13-5.5 7.036-3.24-.906-5.5-3.796-5.5-7.036v-3.24Z" />
@@ -52,6 +55,7 @@ const companySections: NavSection[] = [
   },
   {
     label: "Runtime Alerts",
+    feature: "runtime_alerts",
     icon: (
       <Icon>
         <path d="M8.22 1.754a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm-1.763-.707c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm-.25-5.25a.75.75 0 0 0-1.5 0v2.5a.75.75 0 0 0 1.5 0Z" />
@@ -60,6 +64,34 @@ const companySections: NavSection[] = [
     items: [
       { href: "/runtime-alerts", label: "Dashboard", exact: true },
       { href: "/runtime-alerts/feed", label: "Alerts" },
+    ],
+  },
+  {
+    label: "Leak Checking",
+    feature: "leak_checking",
+    icon: (
+      <Icon>
+        <path d="M8 1a4 4 0 0 0-4 4v2H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-1V5a4 4 0 0 0-4-4Zm2.5 6h-5V5a2.5 2.5 0 0 1 5 0Z" />
+      </Icon>
+    ),
+    items: [
+      { href: "/leak-checking", label: "Dashboard", exact: true },
+      { href: "/leak-checking/identities", label: "Identities" },
+    ],
+  },
+  {
+    label: "URL Monitoring",
+    feature: "url_monitoring",
+    icon: (
+      <Icon>
+        <circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" strokeWidth="1.3" />
+        <ellipse cx="8" cy="8" rx="2.75" ry="6.25" fill="none" stroke="currentColor" strokeWidth="1.1" />
+        <path d="M1.9 8h12.2" stroke="currentColor" strokeWidth="1.1" />
+      </Icon>
+    ),
+    items: [
+      { href: "/url-monitoring", label: "Dashboard", exact: true },
+      { href: "/url-monitoring/sites", label: "Sites" },
     ],
   },
   {
@@ -86,6 +118,15 @@ const superAdminLinks: NavItem[] = [
       </Icon>
     ),
   },
+  {
+    href: "/configuration",
+    label: "Configuration",
+    icon: (
+      <Icon>
+        <path d="m8.878.392 1.037.259a1 1 0 0 1 .75.928l.055 1.14a5.98 5.98 0 0 1 1.44.833l1.06-.44a1 1 0 0 1 1.166.361l.6.882a1 1 0 0 1-.166 1.32l-.867.75c.088.31.14.633.156.964l1.005.5a1 1 0 0 1 .49 1.21l-.34 1.01a1 1 0 0 1-1.1.667l-1.12-.19a5.98 5.98 0 0 1-.96 1.05l.19 1.12a1 1 0 0 1-.667 1.1l-1.01.34a1 1 0 0 1-1.21-.49l-.5-1.005a5.98 5.98 0 0 1-1.35 0l-.5 1.005a1 1 0 0 1-1.21.49l-1.01-.34a1 1 0 0 1-.667-1.1l.19-1.12a5.98 5.98 0 0 1-.96-1.05l-1.12.19a1 1 0 0 1-1.1-.667l-.34-1.01a1 1 0 0 1 .49-1.21l1.005-.5c.016-.33.068-.653.156-.964l-.867-.75a1 1 0 0 1-.166-1.32l.6-.882a1 1 0 0 1 1.166-.36l1.06.44a5.98 5.98 0 0 1 1.44-.833l.055-1.14a1 1 0 0 1 .75-.928Zm-.878 5.108a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z" />
+      </Icon>
+    ),
+  },
 ];
 
 function isActivePath(pathname: string | null, item: NavItem) {
@@ -106,6 +147,14 @@ function MenuIcon() {
   );
 }
 
+function ChevronIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" className="chevron">
+      <path d="M4.427 6.427 8 10l3.573-3.573a.25.25 0 0 1 .354.354l-3.75 3.75a.25.25 0 0 1-.354 0l-3.75-3.75a.25.25 0 0 1 .354-.354Z" />
+    </svg>
+  );
+}
+
 function CloseIcon() {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
@@ -120,6 +169,7 @@ export function DashboardShell({
   defaultProjectId,
   role,
   companyName,
+  features = [],
   children,
 }: {
   email?: string | null;
@@ -127,6 +177,7 @@ export function DashboardShell({
   defaultProjectId?: string;
   role?: string;
   companyName?: string | null;
+  features?: string[];
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
@@ -167,6 +218,7 @@ export function DashboardShell({
         <Sidebar
           role={role}
           companyName={companyName}
+          features={features}
           open={navOpen}
           onClose={() => setNavOpen(false)}
         />
@@ -250,22 +302,50 @@ function NavLink({
 export function Sidebar({
   role,
   companyName,
+  features = [],
   open = false,
   onClose,
 }: {
   role?: string;
   companyName?: string | null;
+  features?: string[];
   open?: boolean;
   onClose?: () => void;
 }) {
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const projectId = searchParams.get("project");
   const isSuperAdmin = role === "super_admin";
   const sectionLabel = isSuperAdmin ? "Platform" : companyName ?? "Dashboards";
 
   const sections = companySections.filter(
-    (s) => !s.hideForRoles?.includes(role ?? "")
+    (s) => !s.hideForRoles?.includes(role ?? "") && (!s.feature || features.includes(s.feature))
   );
+
+  // All sections start expanded; collapsing is a per-section opt-out the user
+  // toggles, tracked by label. Navigating into a collapsed section's own
+  // route re-expands it so the active link is never hidden.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    const active = companySections.find((s) => s.items.some((i) => isActivePath(pathname, i)));
+    if (active && collapsed.has(active.label)) {
+      setCollapsed((prev) => {
+        const next = new Set(prev);
+        next.delete(active.label);
+        return next;
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  function toggleSection(label: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
 
   return (
     <nav className={`sidebar${open ? " open" : ""}`} aria-label="Main">
@@ -300,22 +380,31 @@ export function Sidebar({
                 />
               );
             }
+            const isCollapsed = collapsed.has(section.label);
             return (
               <div key={section.label} className="sidebar-group">
-                <div className="sidebar-group-label">
+                <button
+                  type="button"
+                  className="sidebar-group-label"
+                  aria-expanded={!isCollapsed}
+                  onClick={() => toggleSection(section.label)}
+                >
                   {section.icon}
                   {section.label}
-                </div>
-                <div className="sidebar-group-items">
-                  {section.items.map((item) => (
-                    <NavLink
-                      key={item.href}
-                      item={item}
-                      projectId={projectId}
-                      onClose={onClose}
-                    />
-                  ))}
-                </div>
+                  <ChevronIcon />
+                </button>
+                {!isCollapsed && (
+                  <div className="sidebar-group-items">
+                    {section.items.map((item) => (
+                      <NavLink
+                        key={item.href}
+                        item={item}
+                        projectId={projectId}
+                        onClose={onClose}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}

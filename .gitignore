@@ -6,3 +6,5 @@ node_modules/
 dist/
 *.db
 *.db-journal
+tsconfig.tsbuildinfo
+docker-compose.override.yml
