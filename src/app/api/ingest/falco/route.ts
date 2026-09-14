@@ -62,6 +62,7 @@ async function processFalcoAlert(alert: FalcoAlert, projectId: string): Promise<
         detectedAt: alertTime,
         status: "opened",
         openIntervals: initialOpenIntervals(alertTime),
+        rawContext: alert.output_fields ? (alert.output_fields as Prisma.InputJsonValue) : undefined,
       },
     });
 

@@ -5,12 +5,22 @@ import {
   getStatusBreakdown,
   getLatencyTrend,
   getRecentSiteScans,
+  getSiteFindings,
 } from "@/lib/url-monitoring-queries";
 import { DashboardTimePicker } from "@/components/DashboardTimePicker";
 import { FilterBar } from "@/components/FilterBar";
-import { DataTable } from "@/components/DataTable";
 import { SeverityBarChart } from "@/components/charts/SeverityBarChart";
 import { LatencyTrendChart } from "@/components/charts/LatencyTrendChart";
+import { SEVERITIES } from "@/lib/constants";
+import { RecentScansList } from "./RecentScansList";
+import { SecurityFindingsList } from "./SecurityFindingsList";
+
+const SITE_FINDING_TYPES = ["ssl_cert", "caa_record", "subdomain"] as const;
+const SITE_FINDING_TYPE_LABELS: Record<(typeof SITE_FINDING_TYPES)[number], string> = {
+  ssl_cert: "SSL/TLS certificate",
+  caa_record: "CAA record",
+  subdomain: "Subdomain discovery",
+};
 
 const STATUS_COLORS: Record<string, string> = {
   "2xx": "#1a7f37",
@@ -20,19 +30,20 @@ const STATUS_COLORS: Record<string, string> = {
   unreachable: "#6e7781",
 };
 
-function statusBadge(statusCode: number | null) {
-  if (statusCode == null) return <span className="badge badge-status-failed">unreachable</span>;
-  if (statusCode >= 200 && statusCode < 400) return <span className="badge badge-status-success">{statusCode}</span>;
-  return <span className="badge badge-status-failed">{statusCode}</span>;
-}
-
 export default async function UrlMonitoringPage({
   searchParams,
 }: {
-  searchParams: Promise<{ window?: string; from?: string; to?: string; status?: "up" | "down" }>;
+  searchParams: Promise<{
+    window?: string;
+    from?: string;
+    to?: string;
+    status?: "up" | "down";
+    findingType?: string;
+    findingSeverity?: string;
+  }>;
 }) {
   const { companyId } = await requireCompanySession();
-  const { window: windowParam, from, to, status } = await searchParams;
+  const { window: windowParam, from, to, status, findingType, findingSeverity } = await searchParams;
 
   // 1h is the shortest window offered here (see DashboardTimePicker minPreset
   // below) — clamp a stale/manually-edited "1m"/"5m" in the URL to it too.
@@ -40,11 +51,12 @@ export default async function UrlMonitoringPage({
   const timeWindow = resolveAlertWindow({ window: effectiveWindowParam, from, to });
   const range = { from: chartFromForWindow(timeWindow), to: timeWindow.to };
 
-  const [stats, statusBreakdown, latencyTrend, recentScans] = await Promise.all([
+  const [stats, statusBreakdown, latencyTrend, recentScans, siteFindings] = await Promise.all([
     getSiteOverviewStats(companyId, range),
     getStatusBreakdown(companyId),
     getLatencyTrend(companyId, range),
-    getRecentSiteScans(companyId, { status, ...range }),
+    getRecentSiteScans(companyId, { status, ...range }), // { scans, nextCursor } — RecentScansList loads more on scroll
+    getSiteFindings(companyId, { type: findingType, severity: findingSeverity }), // { findings, nextCursor } — SecurityFindingsList loads more on scroll
   ]);
 
   return (
@@ -83,6 +95,38 @@ export default async function UrlMonitoringPage({
       </div>
 
       <div className="section card">
+        <h3>Security findings</h3>
+        <div className="toolbar">
+          <FilterBar
+            fields={[
+              {
+                name: "findingType",
+                label: "Check",
+                options: SITE_FINDING_TYPES.map((t) => ({ value: t, label: SITE_FINDING_TYPE_LABELS[t] })),
+              },
+              {
+                name: "findingSeverity",
+                label: "Severity",
+                options: SEVERITIES.map((s) => ({ value: s, label: s })),
+              },
+            ]}
+          />
+        </div>
+        <SecurityFindingsList
+          initialRows={siteFindings.findings.map((f) => ({
+            id: f.id,
+            domain: f.site.domain,
+            type: f.type,
+            severity: f.severity,
+            title: f.title,
+            detectedAt: f.detectedAt.toISOString(),
+          }))}
+          initialCursor={siteFindings.nextCursor}
+          filters={{ type: findingType, severity: findingSeverity }}
+        />
+      </div>
+
+      <div className="section card">
         <div className="trend-card-header">
           <h3>Latency trend</h3>
           <span className="muted" style={{ fontSize: 13 }}>
@@ -108,23 +152,16 @@ export default async function UrlMonitoringPage({
             ]}
           />
         </div>
-        <DataTable
-          columns={[
-            { id: "target", header: "Target", mobileFullWidth: true },
-            { id: "status", header: "Status" },
-            { id: "latency", header: "Latency" },
-            { id: "scannedAt", header: "Scanned" },
-          ]}
-          rows={recentScans.map((s) => ({
-            key: s.id,
-            cells: [
-              s.endpoint ? `${s.site.domain}${s.endpoint.path}` : s.site.domain,
-              statusBadge(s.statusCode),
-              s.latencyMs != null ? `${Math.round(s.latencyMs)}ms` : "—",
-              s.scannedAt.toLocaleString(),
-            ],
+        <RecentScansList
+          initialRows={recentScans.scans.map((s) => ({
+            id: s.id,
+            target: s.endpoint ? `${s.site.domain}${s.endpoint.path}` : s.site.domain,
+            statusCode: s.statusCode,
+            latencyMs: s.latencyMs,
+            scannedAt: s.scannedAt.toISOString(),
           }))}
-          emptyMessage="No scans in this time window."
+          initialCursor={recentScans.nextCursor}
+          filters={{ status, from: range.from.toISOString(), to: range.to.toISOString() }}
         />
       </div>
     </div>

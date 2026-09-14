@@ -82,6 +82,31 @@ export async function updateNotificationConfig(projectId: string, data: {
   revalidatePath("/settings");
 }
 
+export async function updateCompanyNotificationConfig(data: {
+  slackWebhookUrl: string;
+  notifyEmail: string;
+  severityThreshold: string;
+}) {
+  const { companyId, email } = await requireAdmin();
+
+  await prisma.companyNotificationConfig.upsert({
+    where: { companyId },
+    update: {
+      slackWebhookUrl: data.slackWebhookUrl || null,
+      notifyEmail: data.notifyEmail || null,
+      severityThreshold: data.severityThreshold,
+    },
+    create: {
+      companyId,
+      slackWebhookUrl: data.slackWebhookUrl || null,
+      notifyEmail: data.notifyEmail || null,
+      severityThreshold: data.severityThreshold,
+    },
+  });
+  await logAdminAction({ companyId, actorEmail: email, action: "notify.update", detail: `scope=company threshold=${data.severityThreshold}` });
+  revalidatePath("/settings");
+}
+
 export async function createProject(name: string) {
   const { companyId, email } = await requireAdmin();
   const trimmed = name.trim();
@@ -170,4 +195,31 @@ export async function resetTeammatePassword(userId: string) {
   await logAdminAction({ companyId, actorEmail, action: "team.reset_password", detail: `email=${target.email}` });
   revalidatePath("/settings");
   return { email: target.email, tempPassword };
+}
+
+const ACTIVITY_INITIAL_TAKE = 7;
+
+export async function loadMoreActivity(cursor: string) {
+  const { companyId } = await requireAdmin();
+  const take = ACTIVITY_INITIAL_TAKE;
+  const rows = await prisma.adminAuditLog.findMany({
+    where: { companyId },
+    orderBy: { createdAt: "desc" },
+    take: take + 1,
+    cursor: { id: cursor },
+    skip: 1,
+  });
+
+  const hasMore = rows.length > take;
+  const activity = hasMore ? rows.slice(0, take) : rows;
+  return {
+    rows: activity.map((a) => ({
+      id: a.id,
+      createdAt: a.createdAt.toISOString(),
+      actorEmail: a.actorEmail,
+      action: a.action,
+      detail: a.detail,
+    })),
+    nextCursor: hasMore ? activity[activity.length - 1].id : null,
+  };
 }

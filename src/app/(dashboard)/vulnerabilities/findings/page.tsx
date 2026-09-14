@@ -2,12 +2,15 @@ import { requireCompanySession } from "@/lib/session";
 import { resolveProject } from "@/lib/current-project";
 import { listTrivyFindings, getTopOffendingImages } from "@/lib/queries";
 import { prisma } from "@/lib/prisma";
+import { isAiAssistantAvailable } from "@/lib/ai-runtime";
 import { SEVERITIES, DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { LIFECYCLE_TRACKED_TOOLS } from "@/lib/finding-lifecycle";
 import { DataTable } from "@/components/DataTable";
 import { FilterBar } from "@/components/FilterBar";
 import { TextFilter } from "@/components/TextFilter";
 import { Pagination } from "@/components/Pagination";
 import { TrivyFindingsTable } from "@/components/TrivyFindingsTable";
+import { PrioritizeButton } from "./PrioritizeButton";
 
 export default async function VulnerabilityFindingsPage({
   searchParams,
@@ -19,23 +22,27 @@ export default async function VulnerabilityFindingsPage({
     fixedStatus?: "fixed" | "unfixed";
     resource?: string;
     status?: "opened" | "reopened" | "resolved" | "open" | "all";
+    tool?: string;
+    sort?: "priority";
     cursor?: string;
   }>;
 }) {
   const { companyId } = await requireCompanySession();
-  const { project: projectParam, severity, repo, fixedStatus, resource, status, cursor } = await searchParams;
+  const { project: projectParam, severity, repo, fixedStatus, resource, status, tool, sort, cursor } = await searchParams;
   const project = await resolveProject(companyId, projectParam);
   if (!project) {
     return <p className="muted">No project configured yet.</p>;
   }
 
-  const [{ findings, nextCursor, total }, topImages, repoRows] = await Promise.all([
+  const [{ findings, nextCursor, total }, topImages, repoRows, aiAvailable] = await Promise.all([
     listTrivyFindings(project.id, {
       severity,
       repo,
       fixedStatus,
       resource,
       status,
+      tool,
+      sort,
       cursor,
     }),
     getTopOffendingImages(project.id),
@@ -44,11 +51,15 @@ export default async function VulnerabilityFindingsPage({
       select: { repo: true },
       distinct: ["repo"],
     }),
+    isAiAssistantAvailable(companyId),
   ]);
 
   return (
     <div>
-      <h2 className="page-title">Findings — {project.name}</h2>
+      <div className="toolbar" style={{ justifyContent: "space-between", alignItems: "center" }}>
+        <h2 className="page-title" style={{ margin: 0 }}>Findings — {project.name}</h2>
+        {aiAvailable && <PrioritizeButton projectId={project.id} />}
+      </div>
 
       <div className="section card">
         <h3>Top offending images</h3>
@@ -68,6 +79,11 @@ export default async function VulnerabilityFindingsPage({
       <div className="toolbar">
         <FilterBar
           fields={[
+            {
+              name: "tool",
+              label: "Scanner",
+              options: LIFECYCLE_TRACKED_TOOLS.map((t) => ({ value: t, label: t })),
+            },
             {
               name: "status",
               label: "Status",
@@ -95,12 +111,15 @@ export default async function VulnerabilityFindingsPage({
                 { value: "unfixed", label: "Unfixed" },
               ],
             },
+            ...(aiAvailable
+              ? [{ name: "sort", label: "Sort", options: [{ value: "priority", label: "AI priority" }] }]
+              : []),
           ]}
         />
         <TextFilter name="resource" placeholder="Filter by image / target" />
       </div>
 
-      <TrivyFindingsTable findings={findings} />
+      <TrivyFindingsTable findings={findings} aiAvailable={aiAvailable} />
       <Pagination nextCursor={nextCursor} pageCount={findings.length} total={total} take={DEFAULT_PAGE_SIZE} />
     </div>
   );

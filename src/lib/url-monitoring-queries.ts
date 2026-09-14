@@ -1,5 +1,4 @@
 import { prisma } from "./prisma";
-import { DEFAULT_PAGE_SIZE } from "./constants";
 import { eachUtcDay } from "./trend-range";
 
 export type StatusBucket = "2xx" | "3xx" | "4xx" | "5xx" | "unreachable";
@@ -87,14 +86,17 @@ export async function getLatencyTrend(companyId: string, range: { from: Date; to
     .map(([date, { total, count }]) => ({ date, avgLatencyMs: count > 0 ? total / count : null }));
 }
 
+const RECENT_SCANS_INITIAL_TAKE = 7;
+
 export async function getRecentSiteScans(
   companyId: string,
-  filters: { status?: "up" | "down"; from: Date; to: Date; limit?: number }
+  filters: { status?: "up" | "down"; from: Date; to: Date; limit?: number; cursor?: string }
 ) {
   const upFilter = { statusCode: { gte: 200, lt: 400 } };
   const downFilter = { OR: [{ statusCode: null }, { statusCode: { lt: 200 } }, { statusCode: { gte: 400 } }] };
+  const take = filters.limit ?? RECENT_SCANS_INITIAL_TAKE;
 
-  return prisma.siteScanResult.findMany({
+  const rows = await prisma.siteScanResult.findMany({
     where: {
       site: { companyId },
       scannedAt: { gte: filters.from, lte: filters.to },
@@ -102,7 +104,38 @@ export async function getRecentSiteScans(
       ...(filters.status === "down" ? downFilter : {}),
     },
     orderBy: { scannedAt: "desc" },
-    take: filters.limit ?? DEFAULT_PAGE_SIZE,
+    take: take + 1,
+    ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
     include: { site: { select: { domain: true } }, endpoint: { select: { path: true } } },
   });
+
+  const hasMore = rows.length > take;
+  const scans = hasMore ? rows.slice(0, take) : rows;
+  return { scans, nextCursor: hasMore ? scans[scans.length - 1].id : null };
+}
+
+const SITE_FINDINGS_INITIAL_TAKE = 7;
+
+export async function getSiteFindings(
+  companyId: string,
+  filters: { type?: string; severity?: string; limit?: number; cursor?: string }
+) {
+  const take = filters.limit ?? SITE_FINDINGS_INITIAL_TAKE;
+
+  const rows = await prisma.siteFinding.findMany({
+    where: {
+      site: { companyId },
+      status: { in: ["opened", "reopened"] },
+      ...(filters.type ? { type: filters.type } : {}),
+      ...(filters.severity ? { severity: filters.severity } : {}),
+    },
+    include: { site: { select: { domain: true } } },
+    orderBy: { detectedAt: "desc" },
+    take: take + 1,
+    ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
+  });
+
+  const hasMore = rows.length > take;
+  const findings = hasMore ? rows.slice(0, take) : rows;
+  return { findings, nextCursor: hasMore ? findings[findings.length - 1].id : null };
 }

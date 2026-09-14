@@ -11,6 +11,34 @@ export function isOpenStatus(status: string): boolean {
   return status === "opened" || status === "reopened";
 }
 
+// Tools whose findings go through the opened/resolved/reopened lifecycle
+// (a full result set is diffed each run — see src/lib/batch-ingest.ts) as
+// opposed to event-stream tools (Falco, file-integrity) whose findings stay
+// "opened" forever, one per discrete event. Dashboard queries branch on this
+// to decide whether "open" vs "resolved" counts/health-score deductions are
+// meaningful for a given tool — originally hardcoded to `tool === "trivy"`
+// before other batch-shaped scanners existed.
+export const LIFECYCLE_TRACKED_TOOLS = [
+  "trivy",
+  "semgrep",
+  "gitleaks",
+  "trivy-license",
+  "iac-misconfig",
+  "kube-bench",
+  "cloudsplaining",
+] as const;
+
+const LIFECYCLE_TRACKED_TOOLS_SET = new Set<string>(LIFECYCLE_TRACKED_TOOLS);
+
+export function hasLifecycleTracking(tool: string | undefined): boolean {
+  return tool !== undefined && LIFECYCLE_TRACKED_TOOLS_SET.has(tool);
+}
+
+// The event-stream counterpart to LIFECYCLE_TRACKED_TOOLS — findings stay
+// "opened" forever, one per discrete event, rather than being diffed against
+// a full result set each run.
+export const EVENT_STREAM_TOOLS = ["falco", "file-integrity"] as const;
+
 export function parseOpenIntervals(raw: unknown): OpenInterval[] {
   if (!Array.isArray(raw)) return [];
   return raw

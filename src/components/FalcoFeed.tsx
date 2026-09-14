@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { DataTable, type DataTableColumn } from "./DataTable";
 import { Drawer } from "./Drawer";
 import { SeverityBadge } from "./SeverityBadge";
+import { AiExplainPanel } from "./AiExplainPanel";
+import { AiCorrelatePanel } from "./AiCorrelatePanel";
 
 type FalcoFinding = {
   id: string;
@@ -31,7 +33,13 @@ function clipWords(text: string, maxWords: number): { clipped: string; truncated
   return { clipped: `${words.slice(0, maxWords).join(" ")}…`, truncated: true };
 }
 
-export function FalcoFeed({ findings }: { findings: FalcoFinding[] }) {
+export function FalcoFeed({
+  findings,
+  aiAvailable = false,
+}: {
+  findings: FalcoFinding[];
+  aiAvailable?: boolean;
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = findings.find((f) => f.id === selectedId) ?? null;
 
@@ -90,6 +98,16 @@ export function FalcoFeed({ findings }: { findings: FalcoFinding[] }) {
               <dt>Detected</dt>
               <dd>{new Date(selected.detectedAt).toLocaleString()}</dd>
             </dl>
+
+            {aiAvailable && (
+              <div
+                className="section"
+                style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 12 }}
+              >
+                <AiExplainPanel key={`${selected.id}-explain`} findingId={selected.id} />
+                <AiCorrelatePanel key={`${selected.id}-correlate`} findingId={selected.id} />
+              </div>
+            )}
           </>
         )}
       </Drawer>

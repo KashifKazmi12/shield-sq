@@ -7,6 +7,9 @@ import { DataTable } from "@/components/DataTable";
 import { PendingLink } from "@/components/PendingLink";
 import { TokenManager } from "./TokenManager";
 import { NotificationConfigForm } from "./NotificationConfigForm";
+import { CompanyNotificationConfigForm } from "./CompanyNotificationConfigForm";
+import { AiAssistantForm } from "./AiAssistantForm";
+import { ActivityList } from "./ActivityList";
 import { NewProjectForm } from "./NewProjectForm";
 import { TeamManager } from "./TeamManager";
 import { SettingsTabs } from "./SettingsTabs";
@@ -54,11 +57,28 @@ export default async function SettingsPage({
   }
 
   const projects = await listProjects(companyId);
-  const [tokens, notifyConfig, activity] = await Promise.all([
-    prisma.ingestToken.findMany({ where: { projectId: project.id }, orderBy: { createdAt: "desc" } }),
-    prisma.notificationConfig.findUnique({ where: { projectId: project.id } }),
-    prisma.adminAuditLog.findMany({ where: { companyId }, orderBy: { createdAt: "desc" }, take: 20 }),
-  ]);
+  const ACTIVITY_TAKE = 7;
+  const AI_USAGE_TAKE = 7;
+  const [tokens, notifyConfig, companyNotifyConfig, activityRows, company, aiConfigs, aiUsageTotals, aiUsageRows] =
+    await Promise.all([
+      prisma.ingestToken.findMany({ where: { projectId: project.id }, orderBy: { createdAt: "desc" } }),
+      prisma.notificationConfig.findUnique({ where: { projectId: project.id } }),
+      prisma.companyNotificationConfig.findUnique({ where: { companyId } }),
+      prisma.adminAuditLog.findMany({ where: { companyId }, orderBy: { createdAt: "desc" }, take: ACTIVITY_TAKE + 1 }),
+      prisma.company.findUnique({ where: { id: companyId }, select: { features: true } }),
+      prisma.aiProviderConfig.findMany({ where: { companyId } }),
+      prisma.aiUsageLog.aggregate({ where: { companyId }, _count: { _all: true }, _sum: { totalTokens: true } }),
+      prisma.aiUsageLog.findMany({ where: { companyId }, orderBy: { createdAt: "desc" }, take: AI_USAGE_TAKE + 1 }),
+    ]);
+  const hasAiFeature = company?.features.includes("ai_assistant") ?? false;
+
+  const activityHasMore = activityRows.length > ACTIVITY_TAKE;
+  const activity = activityHasMore ? activityRows.slice(0, ACTIVITY_TAKE) : activityRows;
+  const activityNextCursor = activityHasMore ? activity[activity.length - 1].id : null;
+
+  const aiUsageHasMore = aiUsageRows.length > AI_USAGE_TAKE;
+  const aiUsageRecent = aiUsageHasMore ? aiUsageRows.slice(0, AI_USAGE_TAKE) : aiUsageRows;
+  const aiUsageNextCursor = aiUsageHasMore ? aiUsageRecent[aiUsageRecent.length - 1].id : null;
 
   return (
     <div>
@@ -131,6 +151,52 @@ export default async function SettingsPage({
             ),
           },
           {
+            key: "leak-alerts",
+            label: "Leak alerts",
+            node: (
+              <div className="card">
+                <h3>Leak &amp; identity DNS alerts</h3>
+                <CompanyNotificationConfigForm config={companyNotifyConfig} />
+              </div>
+            ),
+          },
+          ...(hasAiFeature
+            ? [
+                {
+                  key: "ai-assistant",
+                  label: "AI Assistant",
+                  node: (
+                    <div className="card">
+                      <h3>AI Assistant</h3>
+                      <AiAssistantForm
+                        configs={aiConfigs.map((c) => ({
+                          provider: c.provider,
+                          model: c.model,
+                          apiKeyPreview: c.apiKeyPreview,
+                          isActive: c.isActive,
+                          hasKey: c.apiKeyCiphertext != null,
+                        }))}
+                        usage={{
+                          totalCalls: aiUsageTotals._count._all,
+                          totalTokens: aiUsageTotals._sum.totalTokens ?? 0,
+                          recent: aiUsageRecent.map((r) => ({
+                            id: r.id,
+                            provider: r.provider,
+                            model: r.model,
+                            totalTokens: r.totalTokens,
+                            success: r.success,
+                            createdAt: r.createdAt.toISOString(),
+                            detail: r.detail,
+                          })),
+                          nextCursor: aiUsageNextCursor,
+                        }}
+                      />
+                    </div>
+                  ),
+                },
+              ]
+            : []),
+          {
             key: "activity",
             label: "Activity",
             node: (
@@ -140,23 +206,15 @@ export default async function SettingsPage({
                   Recent admin changes to your company's tokens, team, projects, and notification
                   config.
                 </p>
-                <DataTable
-                  columns={[
-                    { id: "when", header: "When" },
-                    { id: "who", header: "Who", mobileFullWidth: true },
-                    { id: "action", header: "Action" },
-                    { id: "detail", header: "Detail", mobileFullWidth: true },
-                  ]}
-                  rows={activity.map((a) => ({
-                    key: a.id,
-                    cells: [
-                      a.createdAt.toLocaleString(),
-                      a.actorEmail,
-                      a.action,
-                      <span key="d" className="muted">{a.detail ?? ""}</span>,
-                    ],
+                <ActivityList
+                  initialRows={activity.map((a) => ({
+                    id: a.id,
+                    createdAt: a.createdAt.toISOString(),
+                    actorEmail: a.actorEmail,
+                    action: a.action,
+                    detail: a.detail,
                   }))}
-                  emptyMessage="No changes recorded yet."
+                  initialCursor={activityNextCursor}
                 />
               </div>
             ),

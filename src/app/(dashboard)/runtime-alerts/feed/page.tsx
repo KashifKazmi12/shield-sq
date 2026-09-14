@@ -3,7 +3,9 @@ import { resolveProject } from "@/lib/current-project";
 import { listFalcoFindings } from "@/lib/queries";
 import { resolveAlertWindow } from "@/lib/alert-window";
 import { prisma } from "@/lib/prisma";
+import { isAiAssistantAvailable } from "@/lib/ai-runtime";
 import { SEVERITIES, DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { EVENT_STREAM_TOOLS } from "@/lib/finding-lifecycle";
 import { FilterBar } from "@/components/FilterBar";
 import { TextFilter } from "@/components/TextFilter";
 import { Pagination } from "@/components/Pagination";
@@ -19,6 +21,7 @@ export default async function RuntimeAlertsFeedPage({
     severity?: string;
     ruleName?: string;
     resource?: string;
+    tool?: string;
     window?: string;
     from?: string;
     to?: string;
@@ -26,7 +29,7 @@ export default async function RuntimeAlertsFeedPage({
   }>;
 }) {
   const { companyId } = await requireCompanySession();
-  const { project: projectParam, severity, ruleName, resource, window: windowParam, from, to, cursor } =
+  const { project: projectParam, severity, ruleName, resource, tool, window: windowParam, from, to, cursor } =
     await searchParams;
   const project = await resolveProject(companyId, projectParam);
   if (!project) {
@@ -36,20 +39,22 @@ export default async function RuntimeAlertsFeedPage({
   const alertWindow = resolveAlertWindow({ window: windowParam, from, to });
   const useUpperBound = alertWindow.key === "custom";
 
-  const [{ findings, nextCursor, total }, ruleRows] = await Promise.all([
+  const [{ findings, nextCursor, total }, ruleRows, aiAvailable] = await Promise.all([
     listFalcoFindings(project.id, {
       severity,
       ruleName,
       resource,
+      tool,
       detectedAfter: alertWindow.from ?? undefined,
       detectedBefore: useUpperBound ? alertWindow.to : undefined,
       cursor,
     }),
     prisma.finding.findMany({
-      where: { scan: { projectId: project.id }, tool: "falco", ruleName: { not: null } },
+      where: { scan: { projectId: project.id }, tool: { in: [...EVENT_STREAM_TOOLS] }, ruleName: { not: null } },
       select: { ruleName: true },
       distinct: ["ruleName"],
     }),
+    isAiAssistantAvailable(companyId),
   ]);
 
   return (
@@ -67,6 +72,11 @@ export default async function RuntimeAlertsFeedPage({
       <div className="toolbar">
         <FilterBar
           fields={[
+            {
+              name: "tool",
+              label: "Source",
+              options: EVENT_STREAM_TOOLS.map((t) => ({ value: t, label: t })),
+            },
             { name: "severity", label: "Severity", options: SEVERITIES.map((s) => ({ value: s, label: s })) },
             {
               name: "ruleName",
@@ -80,7 +90,7 @@ export default async function RuntimeAlertsFeedPage({
         <TextFilter name="resource" placeholder="Filter by host / pod / namespace" />
       </div>
 
-      <FalcoFeed findings={findings} />
+      <FalcoFeed findings={findings} aiAvailable={aiAvailable} />
       <Pagination nextCursor={nextCursor} pageCount={findings.length} total={total} take={DEFAULT_PAGE_SIZE} />
     </div>
   );

@@ -4,8 +4,11 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireCompanyFeature } from "@/lib/rbac";
+import { requireCompanySession } from "@/lib/session";
 import { logAdminAction } from "@/lib/audit";
 import { discoverAndScanSite, rescanSite as rescanSiteScans, deriveDomain } from "@/lib/url-monitor";
+import { runSiteSecurityChecks } from "@/lib/site-checks";
+import { getRecentSiteScans, getSiteFindings } from "@/lib/url-monitoring-queries";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
 
 async function requireOwnedSite(siteId: string, companyId: string) {
@@ -48,6 +51,7 @@ export async function createSite(input: { url: string }) {
   let warning: string | undefined;
   try {
     await discoverAndScanSite(site.id, url);
+    await runSiteSecurityChecks(site.id, site.domain);
   } catch (err) {
     warning = err instanceof Error ? err.message : "Initial scan failed";
   }
@@ -60,6 +64,7 @@ export async function rescanSite(siteId: string) {
   const { companyId, email } = await requireAdmin();
   const site = await requireOwnedSite(siteId, companyId);
   await rescanSiteScans(siteId, site.url);
+  await runSiteSecurityChecks(siteId, site.domain);
   await logAdminAction({ companyId, actorEmail: email, action: "url_site.rescan", detail: `url=${site.url}` });
   revalidatePath("/url-monitoring");
 }
@@ -91,6 +96,53 @@ export async function deleteEndpoint(endpointId: string) {
   await prisma.monitoredEndpoint.delete({ where: { id: endpointId } });
   await logAdminAction({ companyId, actorEmail: email, action: "url_endpoint.delete", detail: `url=${endpoint.url}` });
   revalidatePath("/url-monitoring");
+}
+
+export async function loadMoreRecentScans(params: {
+  cursor: string;
+  status?: "up" | "down";
+  from: string;
+  to: string;
+}) {
+  const { companyId } = await requireCompanySession();
+  const { scans, nextCursor } = await getRecentSiteScans(companyId, {
+    status: params.status,
+    from: new Date(params.from),
+    to: new Date(params.to),
+    cursor: params.cursor,
+  });
+
+  return {
+    rows: scans.map((s) => ({
+      id: s.id,
+      target: s.endpoint ? `${s.site.domain}${s.endpoint.path}` : s.site.domain,
+      statusCode: s.statusCode,
+      latencyMs: s.latencyMs,
+      scannedAt: s.scannedAt.toISOString(),
+    })),
+    nextCursor,
+  };
+}
+
+export async function loadMoreSiteFindings(params: { cursor: string; type?: string; severity?: string }) {
+  const { companyId } = await requireCompanySession();
+  const { findings, nextCursor } = await getSiteFindings(companyId, {
+    type: params.type,
+    severity: params.severity,
+    cursor: params.cursor,
+  });
+
+  return {
+    rows: findings.map((f) => ({
+      id: f.id,
+      domain: f.site.domain,
+      type: f.type,
+      severity: f.severity,
+      title: f.title,
+      detectedAt: f.detectedAt.toISOString(),
+    })),
+    nextCursor,
+  };
 }
 
 export async function listScanResults(params: { siteId?: string; endpointId?: string; page?: number }) {

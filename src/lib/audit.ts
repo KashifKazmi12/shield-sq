@@ -1,7 +1,12 @@
 import { prisma } from "./prisma";
 
+// Free-form rather than a literal union: every new ingest route (Semgrep,
+// gitleaks, trivy-license, iac-misconfig, kube-bench, cloudsplaining,
+// file-integrity, ...) passes its own tool name here, and none of them need
+// type-level enforcement beyond "it's the string the route already uses" —
+// IngestAuditLog.source in schema.prisma is a plain String for the same reason.
 export async function logRejectedIngest(params: {
-  source: "trivy" | "falco";
+  source: string;
   projectId?: string;
   reason: string;
   detail?: string;

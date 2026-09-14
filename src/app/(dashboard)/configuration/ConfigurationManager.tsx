@@ -41,11 +41,13 @@ function ProviderRow({
   providerCount,
   isPending,
   onError,
+  secretsKeyConfigured,
 }: {
   config: ProviderConfig;
   providerCount: number;
   isPending: boolean;
   onError: (msg: string) => void;
+  secretsKeyConfigured: boolean;
 }) {
   const [isChangingKey, setIsChangingKey] = useState(false);
   const [keyInput, setKeyInput] = useState("");
@@ -221,7 +223,13 @@ function ProviderRow({
           Reset count
         </button>
         {!isChangingKey && (
-          <button type="button" className="secondary" disabled={isPending} onClick={() => setIsChangingKey(true)}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={isPending || !secretsKeyConfigured}
+            title={secretsKeyConfigured ? undefined : "PROVIDER_SECRETS_KEY is not configured on the server"}
+            onClick={() => setIsChangingKey(true)}
+          >
             Change key
           </button>
         )}
@@ -272,10 +280,12 @@ export function ConfigurationManager({
   providers,
   limits,
   initialUsage,
+  secretsKeyConfigured,
 }: {
   providers: ProviderConfig[];
   limits: Limits;
   initialUsage: Usage;
+  secretsKeyConfigured: boolean;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [globalDailyLimit, setGlobalDailyLimit] = useState(limits.globalDailyLimit?.toString() ?? "");
@@ -315,6 +325,21 @@ export function ConfigurationManager({
     <div>
       {error && <p style={{ color: "var(--danger-fg)", fontSize: 13 }}>{error}</p>}
 
+      {!secretsKeyConfigured && (
+        <p
+          className="card section"
+          style={{
+            padding: 12,
+            fontSize: 13,
+            color: "var(--danger-fg)",
+            borderColor: "var(--danger-fg)",
+          }}
+        >
+          Provider API keys can&apos;t be saved: <code>PROVIDER_SECRETS_KEY</code> is not configured on the server.
+          Set it (32 random bytes, base64 — e.g. via <code>openssl rand -base64 32</code>) and redeploy.
+        </p>
+      )}
+
       <h3>Providers</h3>
       {sorted.map((config) => (
         <ProviderRow
@@ -323,6 +348,7 @@ export function ConfigurationManager({
           providerCount={sorted.length}
           isPending={isPending}
           onError={setError}
+          secretsKeyConfigured={secretsKeyConfigured}
         />
       ))}
 

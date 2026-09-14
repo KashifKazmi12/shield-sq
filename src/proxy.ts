@@ -38,5 +38,15 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api/ingest|api/auth|login|_next/static|_next/image|favicon.ico|icon.svg).*)"],
+  // `$` in the exclusion list carves out the exact root path ("/") — that's
+  // now the public marketing page (src/app/page.tsx), rendered for signed-out
+  // visitors instead of bouncing them to /login. Every other route, including
+  // "/foo", is unaffected since "$" only matches when nothing follows the
+  // leading slash.
+  // Also skip files served from /public (hero images, icons, etc.) — without
+  // this, /hero-security.jpg was redirected to /login and the landing hero
+  // looked empty.
+  matcher: [
+    "/((?!api/ingest|api/auth|login|_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|xml)|$).*)",
+  ],
 };

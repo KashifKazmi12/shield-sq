@@ -5,10 +5,16 @@ import { Prisma } from "@prisma/client";
 import type { LeakIdentifierType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireCompanyFeature } from "@/lib/rbac";
+import { requireCompanySession } from "@/lib/session";
 import { logAdminAction } from "@/lib/audit";
 import { checkIdentity, QuotaExceededError } from "@/lib/leak-providers";
 import { encryptSecret, decryptSecret } from "@/lib/secrets";
 import { DEFAULT_PAGE_SIZE } from "@/lib/constants";
+import { checkPasswordPwned } from "@/lib/pwned-passwords";
+import { checkIdentityDns, domainFromEmail } from "@/lib/identity-dns-checks";
+import { enqueueCompanyAlert, type AlertItem } from "@/lib/notify";
+import { severityMeetsThreshold } from "@/lib/severity";
+import { getRecentLeakFindings, getOpenIdentityDnsFindings } from "@/lib/leak-checking-queries";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -18,10 +24,20 @@ async function requireOwnedIdentity(identityId: string, companyId: string) {
   return identity;
 }
 
-// Shared by createIdentity's initial check and syncIdentity/syncAllIdentities
-// — one code path so a future scheduler (see GAPS.md) can call the exact
-// same logic without duplicating it.
-async function runCheckAndReschedule(identityId: string, userId: string) {
+async function notifyNewIdentityFindings(
+  companyId: string,
+  identityLabel: string,
+  leakItems: AlertItem[],
+  dnsItems: AlertItem[]
+) {
+  const config = await prisma.companyNotificationConfig.findUnique({ where: { companyId } });
+  if (!config) return;
+  const items = [...leakItems, ...dnsItems].filter((i) => severityMeetsThreshold(i.severity, config.severityThreshold));
+  await enqueueCompanyAlert(items, identityLabel, config);
+}
+
+// Shared by createIdentity, syncIdentity, and syncAllIdentities.
+export async function runCheckAndReschedule(identityId: string, userId: string | null) {
   const identity = await prisma.monitoredIdentity.update({
     where: { id: identityId },
     data: { status: "pending", lastError: null },
@@ -33,9 +49,26 @@ async function runCheckAndReschedule(identityId: string, userId: string) {
       userId,
     });
 
+    const pwnedByDedupeKey = new Map<string, { pwned: boolean; count: number }>();
+    for (const f of findings) {
+      if (!f.rawPassword) continue;
+      const result = await checkPasswordPwned(f.rawPassword);
+      if (result) pwnedByDedupeKey.set(f.dedupeKey, result);
+    }
+
+    const existingLeakKeys = new Set(
+      (
+        await prisma.leakFinding.findMany({
+          where: { identityId, dedupeKey: { in: findings.map((f) => f.dedupeKey) } },
+          select: { dedupeKey: true },
+        })
+      ).map((r) => r.dedupeKey)
+    );
+
     await prisma.$transaction(
-      findings.map((f) =>
-        prisma.leakFinding.upsert({
+      findings.map((f) => {
+        const pwned = pwnedByDedupeKey.get(f.dedupeKey);
+        return prisma.leakFinding.upsert({
           where: { identityId_dedupeKey: { identityId, dedupeKey: f.dedupeKey } },
           // Re-syncing the same breach refreshes severity/date/password
           // instead of no-op'ing — a provider can return richer data on a
@@ -47,6 +80,8 @@ async function runCheckAndReschedule(identityId: string, userId: string) {
             leakedAt: f.leakedAt,
             details: f.details as Prisma.InputJsonValue,
             passwordCiphertext: f.rawPassword ? encryptSecret(f.rawPassword) : null,
+            passwordPwned: pwned?.pwned ?? null,
+            passwordPwnedCount: pwned?.count ?? null,
           },
           create: {
             identityId,
@@ -57,10 +92,50 @@ async function runCheckAndReschedule(identityId: string, userId: string) {
             dedupeKey: f.dedupeKey,
             details: f.details as Prisma.InputJsonValue,
             passwordCiphertext: f.rawPassword ? encryptSecret(f.rawPassword) : null,
+            passwordPwned: pwned?.pwned ?? null,
+            passwordPwnedCount: pwned?.count ?? null,
           },
-        })
-      )
+        });
+      })
     );
+
+    const newLeakItems: AlertItem[] = findings
+      .filter((f) => !existingLeakKeys.has(f.dedupeKey))
+      .map((f) => ({
+        title: `${f.breachName} (${identity.identifierValue})`,
+        severity: f.severity,
+        description: pwnedByDedupeKey.get(f.dedupeKey)?.pwned
+          ? "Password also found in HaveIBeenPwned's Pwned Passwords list"
+          : null,
+      }));
+
+    let newDnsItems: AlertItem[] = [];
+    if (identity.identifierType === "email") {
+      const domain = domainFromEmail(identity.identifierValue);
+      if (domain) {
+        const dnsFindings = await checkIdentityDns(domain);
+        const existingDnsKeys = new Set(
+          (
+            await prisma.identityFinding.findMany({
+              where: { identityId, dedupeKey: { in: dnsFindings.map((f) => f.dedupeKey) } },
+              select: { dedupeKey: true },
+            })
+          ).map((r) => r.dedupeKey)
+        );
+        const toCreate = dnsFindings.filter((f) => !existingDnsKeys.has(f.dedupeKey));
+        if (toCreate.length > 0) {
+          await prisma.identityFinding.createMany({
+            data: toCreate.map((f) => ({ ...f, identityId })),
+            skipDuplicates: true,
+          });
+        }
+        newDnsItems = toCreate.map((f) => ({ title: `${f.title} (${domain})`, severity: f.severity, description: f.description }));
+      }
+    }
+
+    if (newLeakItems.length > 0 || newDnsItems.length > 0) {
+      await notifyNewIdentityFindings(identity.companyId, identity.identifierValue, newLeakItems, newDnsItems);
+    }
 
     await prisma.monitoredIdentity.update({
       where: { id: identityId },
@@ -214,4 +289,50 @@ export async function revealFindingPassword(findingId: string) {
   });
 
   return { password: decryptSecret(finding.passwordCiphertext) };
+}
+
+export async function loadMoreLeakFindings(params: {
+  cursor: string;
+  severity?: string;
+  source?: string;
+  from: string;
+  to: string;
+}) {
+  const { companyId } = await requireCompanySession();
+  const { findings, nextCursor } = await getRecentLeakFindings(companyId, {
+    severity: params.severity,
+    source: params.source,
+    from: new Date(params.from),
+    to: new Date(params.to),
+    cursor: params.cursor,
+  });
+
+  return {
+    rows: findings.map((f) => ({
+      id: f.id,
+      breachName: f.breachName,
+      identifierValue: f.identity.identifierValue,
+      severity: f.severity,
+      passwordPwned: f.passwordPwned,
+      createdAt: f.createdAt.toISOString(),
+    })),
+    nextCursor,
+  };
+}
+
+export async function loadMoreIdentityDnsFindings(params: { cursor: string }) {
+  const { companyId } = await requireCompanySession();
+  const { findings, nextCursor } = await getOpenIdentityDnsFindings(companyId, { cursor: params.cursor });
+
+  return {
+    rows: findings.map((f) => ({
+      id: f.id,
+      identifierValue: f.identity.identifierValue,
+      type: f.type,
+      severity: f.severity,
+      title: f.title,
+      detectedAt: f.detectedAt.toISOString(),
+    })),
+    nextCursor,
+  };
 }

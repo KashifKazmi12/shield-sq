@@ -37,8 +37,6 @@ export default async function RunDetailPage({
 
       <div className="card section">
         <dl>
-          <dt className="muted">Source</dt>
-          <dd>{scan.source}</dd>
           <dt className="muted">Status</dt>
           <dd>
             <StatusBadge status={scan.status} />

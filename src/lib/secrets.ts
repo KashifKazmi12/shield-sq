@@ -15,9 +15,15 @@ function getKey(): Buffer {
   return key;
 }
 
-// Stored as "iv:authTag:ciphertext", each base64 — plain enough to store in
-// a single text column, self-contained enough to decrypt without anything
-// else from the row.
+export function isSecretsKeyConfigured(): boolean {
+  try {
+    getKey();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function encryptSecret(plaintext: string): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", getKey(), iv);

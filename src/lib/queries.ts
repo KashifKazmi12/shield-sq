@@ -2,7 +2,7 @@ import { prisma } from "./prisma";
 import { SEVERITIES, DEFAULT_PAGE_SIZE } from "./constants";
 import { severityRank } from "./severity";
 import { eachUtcDay, emptySeverityBucket } from "./trend-range";
-import { buildOpenInventoryTrend } from "./finding-lifecycle";
+import { buildOpenInventoryTrend, hasLifecycleTracking, LIFECYCLE_TRACKED_TOOLS, EVENT_STREAM_TOOLS } from "./finding-lifecycle";
 
 export async function listProjects(companyId: string) {
   return prisma.project.findMany({ where: { companyId }, orderBy: { name: "asc" } });
@@ -10,7 +10,7 @@ export async function listProjects(companyId: string) {
 
 export async function getSeverityCounts(
   projectId: string,
-  tool?: "trivy" | "falco",
+  tool?: string,
   options?: { detectedAfter?: Date; detectedBefore?: Date; openOnly?: boolean }
 ) {
   const counts = await prisma.finding.groupBy({
@@ -26,8 +26,8 @@ export async function getSeverityCounts(
             },
           }
         : {}),
-      // Trivy lifecycle: openOnly = current risk (exclude resolved).
-      ...(options?.openOnly && tool === "trivy"
+      // Lifecycle-tracked tools: openOnly = current risk (exclude resolved).
+      ...(options?.openOnly && hasLifecycleTracking(tool)
         ? { status: { in: ["opened", "reopened"] } }
         : {}),
     },
@@ -43,7 +43,7 @@ export async function getSeverityCounts(
 
 export async function getOverviewStats(
   projectId: string,
-  tool?: "trivy" | "falco",
+  tool?: string,
   options?: { detectedAfter?: Date; detectedBefore?: Date }
 ) {
   const findingWhere = {
@@ -73,25 +73,25 @@ export async function getOverviewStats(
   const [severityCounts, healthSeverityCounts, totalFindings, openCritical, openFindings, resolvedFindings, totalScans] =
     await Promise.all([
       getSeverityCounts(projectId, tool, options),
-      // Health reflects current open risk for Trivy (resolved no longer hurts the score).
-      tool === "trivy"
-        ? getSeverityCounts(projectId, "trivy", { ...options, openOnly: true })
+      // Health reflects current open risk for lifecycle-tracked tools (resolved no longer hurts the score).
+      hasLifecycleTracking(tool)
+        ? getSeverityCounts(projectId, tool, { ...options, openOnly: true })
         : Promise.resolve(null),
       prisma.finding.count({ where: findingWhere }),
       prisma.finding.count({
         where: {
           ...findingWhere,
           severity: "critical",
-          ...(tool === "trivy" ? { status: { in: ["opened", "reopened"] } } : {}),
+          ...(hasLifecycleTracking(tool) ? { status: { in: ["opened", "reopened"] } } : {}),
         },
       }),
       prisma.finding.count({
         where: {
           ...findingWhere,
-          ...(tool === "trivy" ? { status: { in: ["opened", "reopened"] } } : {}),
+          ...(hasLifecycleTracking(tool) ? { status: { in: ["opened", "reopened"] } } : {}),
         },
       }),
-      tool === "trivy"
+      hasLifecycleTracking(tool)
         ? prisma.finding.count({ where: { ...findingWhere, status: "resolved" } })
         : Promise.resolve(0),
       prisma.scan.count({ where: scanWhere }),
@@ -103,7 +103,7 @@ export async function getOverviewStats(
     severityCounts,
     totalFindings,
     openCritical,
-    openFindings: tool === "trivy" ? openFindings : totalFindings,
+    openFindings: hasLifecycleTracking(tool) ? openFindings : totalFindings,
     resolvedFindings,
     totalScans,
     healthScore,
@@ -152,7 +152,7 @@ function computeHealthScore(counts: Record<string, number>) {
 
 export async function getFindingsTrend(
   projectId: string,
-  options: { from: Date; to: Date; tool?: "trivy" | "falco" }
+  options: { from: Date; to: Date; tool?: string }
 ) {
   const { from, to, tool } = options;
   const findings = await prisma.finding.findMany({
@@ -252,6 +252,10 @@ export type FindingFilters = {
   resource?: string;
   /** Finding lifecycle status. Default for Trivy: open only (opened + reopened). */
   status?: "opened" | "reopened" | "resolved" | "open" | "all";
+  /** Restrict to one lifecycle-tracked tool (e.g. "semgrep"); defaults to all of them. */
+  tool?: string;
+  /** "priority" sorts by AI Triage's aiPriorityScore desc (untriaged last); default is detectedAt desc. */
+  sort?: "priority";
   /** Only findings with detectedAt >= this instant (alert time windows). */
   detectedAfter?: Date;
   /** Only findings with detectedAt <= this instant (custom ranges). */
@@ -269,7 +273,7 @@ export async function listTrivyFindings(projectId: string, filters: FindingFilte
         ? { status: { in: ["opened", "reopened"] } }
         : { status: filters.status };
   const where = {
-    tool: "trivy" as const,
+    tool: filters.tool ?? { in: [...LIFECYCLE_TRACKED_TOOLS] },
     projectId,
     ...statusFilter,
     ...(filters.repo
@@ -286,7 +290,10 @@ export async function listTrivyFindings(projectId: string, filters: FindingFilte
       where,
       take: take + 1,
       ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
-      orderBy: { detectedAt: "desc" },
+      orderBy:
+        filters.sort === "priority"
+          ? [{ aiPriorityScore: { sort: "desc", nulls: "last" } }, { detectedAt: "desc" }]
+          : { detectedAt: "desc" },
       include: { scan: { select: { repo: true, branch: true, commitSha: true, pipelineId: true, createdAt: true } } },
     }),
     prisma.finding.count({ where }),
@@ -300,7 +307,7 @@ export async function listTrivyFindings(projectId: string, filters: FindingFilte
 export async function listFalcoFindings(projectId: string, filters: FindingFilters) {
   const take = filters.take ?? DEFAULT_PAGE_SIZE;
   const where = {
-    tool: "falco" as const,
+    tool: filters.tool ?? { in: [...EVENT_STREAM_TOOLS] },
     projectId,
     ...(filters.severity ? { severity: filters.severity } : {}),
     ...(filters.ruleName ? { ruleName: filters.ruleName } : {}),

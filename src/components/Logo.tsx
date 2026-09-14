@@ -1,4 +1,12 @@
-export function Logo({ size = 32, className }: { size?: number; className?: string }) {
+export function Logo({
+  size = 32,
+  className,
+  color = "#0969da",
+}: {
+  size?: number;
+  className?: string;
+  color?: string;
+}) {
   return (
     <svg
       width={size}
@@ -7,7 +15,7 @@ export function Logo({ size = 32, className }: { size?: number; className?: stri
       className={className}
       aria-hidden="true"
     >
-      <rect width="32" height="32" rx="8" fill="#0969da" />
+      <rect width="32" height="32" rx="8" fill={color} />
       <path
         d="M16 4.5 6.5 8.4v6.8c0 6.2 4.1 11.9 9.5 13.3 5.4-1.4 9.5-7.1 9.5-13.3V8.4Z"
         fill="#ffffff"

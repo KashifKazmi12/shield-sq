@@ -24,6 +24,9 @@ const FEATURE_HOME: Record<CompanyFeature, string> = {
   runtime_alerts: "/runtime-alerts",
   leak_checking: "/leak-checking",
   url_monitoring: "/url-monitoring",
+  // No dedicated page — the AI Assistant is a floating chat widget available
+  // on every dashboard page, not a nav destination to redirect to.
+  ai_assistant: "/settings",
 };
 
 // Feature entitlement is looked up fresh on every load, not cached in the

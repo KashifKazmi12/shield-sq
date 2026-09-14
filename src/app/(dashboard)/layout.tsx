@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { listProjects } from "@/lib/queries";
+import { hasActiveAiProvider } from "@/lib/ai-runtime";
 import { DashboardShell } from "./nav";
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
@@ -16,6 +17,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   let features: string[] = [];
   let projects: { id: string; name: string }[] = [];
   let defaultProjectId: string | undefined;
+  let aiAssistantReady = false;
 
   if (role === "admin" && session.user?.id) {
     const user = await prisma.user.findUnique({
@@ -49,6 +51,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     ]);
     projects = projectList.map((p) => ({ id: p.id, name: p.name }));
     defaultProjectId = defaultProject?.id;
+
+    if (features.includes("ai_assistant")) {
+      aiAssistantReady = await hasActiveAiProvider(companyId);
+    }
   }
 
   return (
@@ -76,6 +82,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
           role={role}
           companyName={companyName}
           features={features}
+          aiAssistantReady={aiAssistantReady}
         >
           {children}
         </DashboardShell>

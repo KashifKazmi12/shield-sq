@@ -17,6 +17,7 @@ const FEATURE_OPTIONS: { value: CompanyFeature; label: string }[] = [
   { value: "runtime_alerts", label: "Runtime Alerts" },
   { value: "leak_checking", label: "Leak Checking" },
   { value: "url_monitoring", label: "URL Monitoring" },
+  { value: "ai_assistant", label: "AI Assistant" },
 ];
 
 type Company = {

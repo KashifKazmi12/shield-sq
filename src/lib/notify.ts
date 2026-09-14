@@ -29,6 +29,14 @@ export type NotifyPayload = {
   description: string | null;
 };
 
+// The subset of NotifyPayload the actual Slack/email send logic needs —
+// generalized so the same primitives serve both project-scoped Finding
+// notifications (which also record to AlertNotification) and company-scoped
+// LeakFinding/IdentityFinding notifications (which don't: AlertNotification.
+// findingId is FK'd to Finding, so a LeakFinding/IdentityFinding id can't be
+// recorded there without a schema change this feature doesn't need).
+export type AlertItem = { title: string; severity: string; description: string | null };
+
 type NotifyConfig = {
   slackWebhookUrl?: string | null;
   notifyEmail?: string | null;
@@ -41,25 +49,34 @@ type NotifyConfig = {
 // ingestion call sites — they only know about this one function.
 export async function enqueueFindingsNotification(findings: NotifyPayload[], config: NotifyConfig) {
   if (!config || findings.length === 0) return;
+  const groupLabel = findings[0].projectName;
 
   if (config.slackWebhookUrl) {
-    await sendSlackNotification(findings, config.slackWebhookUrl);
+    const status = await withRetry(() => postToSlack(config.slackWebhookUrl!, findings, groupLabel));
+    await recordNotifications(findings, "slack", status);
   }
   if (config.notifyEmail) {
-    await sendEmailNotification(findings, config.notifyEmail);
+    const status = await withRetry(() => sendEmail(config.notifyEmail!, findings, groupLabel));
+    await recordNotifications(findings, "email", status);
   }
 }
 
-function severitySummaryLine(findings: NotifyPayload[]) {
-  const projectName = findings[0].projectName;
-  if (findings.length === 1) {
-    const f = findings[0];
-    return `[${f.severity.toUpperCase()}] ${projectName}: ${f.title}`;
+// Company-scoped counterpart used by leak-checking / identity DNS findings
+// (src/lib/leak-providers.ts, src/lib/identity-dns-checks.ts) — same
+// Slack/email delivery and retry behavior, just without the
+// project-Finding-specific AlertNotification audit row.
+export async function enqueueCompanyAlert(items: AlertItem[], groupLabel: string, config: NotifyConfig) {
+  if (!config || items.length === 0) return;
+  if (config.slackWebhookUrl) await withRetry(() => postToSlack(config.slackWebhookUrl!, items, groupLabel));
+  if (config.notifyEmail) await withRetry(() => sendEmail(config.notifyEmail!, items, groupLabel));
+}
+
+function severitySummaryLine(items: AlertItem[], groupLabel: string) {
+  if (items.length === 1) {
+    return `[${items[0].severity.toUpperCase()}] ${groupLabel}: ${items[0].title}`;
   }
-  const topSeverity = findings
-    .map((f) => f.severity)
-    .sort((a, b) => severityRank(a) - severityRank(b))[0];
-  return `${findings.length} new ${topSeverity.toUpperCase()}+ findings in ${projectName}`;
+  const topSeverity = items.map((f) => f.severity).sort((a, b) => severityRank(a) - severityRank(b))[0];
+  return `${items.length} new ${topSeverity.toUpperCase()}+ findings in ${groupLabel}`;
 }
 
 // Local, tiny copy of the severity ordering to avoid a circular import with
@@ -97,37 +114,27 @@ async function withRetry(fn: () => Promise<void>): Promise<"sent" | "failed"> {
   }
 }
 
-async function sendSlackNotification(findings: NotifyPayload[], webhookUrl: string) {
-  const status = await withRetry(() => postToSlack(webhookUrl, findings));
-  await recordNotifications(findings, "slack", status);
-}
-
-async function sendEmailNotification(findings: NotifyPayload[], email: string) {
-  const status = await withRetry(() => sendEmail(email, findings));
-  await recordNotifications(findings, "email", status);
-}
-
-async function postToSlack(webhookUrl: string, findings: NotifyPayload[]) {
-  const lines = findings.slice(0, 10).map((f) => `• [${f.severity.toUpperCase()}] ${f.title}`);
-  if (findings.length > 10) lines.push(`… and ${findings.length - 10} more`);
+async function postToSlack(webhookUrl: string, items: AlertItem[], groupLabel: string) {
+  const lines = items.slice(0, 10).map((f) => `• [${f.severity.toUpperCase()}] ${f.title}`);
+  if (items.length > 10) lines.push(`… and ${items.length - 10} more`);
 
   const res = await fetch(webhookUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      text: `:rotating_light: ${severitySummaryLine(findings)}${findings.length > 1 ? `\n${lines.join("\n")}` : ""}`,
+      text: `:rotating_light: ${severitySummaryLine(items, groupLabel)}${items.length > 1 ? `\n${lines.join("\n")}` : ""}`,
     }),
   });
   if (!res.ok) throw new Error(`Slack webhook returned ${res.status}`);
 }
 
-async function sendEmail(to: string, findings: NotifyPayload[]) {
-  const lines = findings.map((f) => `[${f.severity.toUpperCase()}] ${f.title}${f.description ? ` — ${f.description}` : ""}`);
+async function sendEmail(to: string, items: AlertItem[], groupLabel: string) {
+  const lines = items.map((f) => `[${f.severity.toUpperCase()}] ${f.title}${f.description ? ` — ${f.description}` : ""}`);
 
   await getTransporter().sendMail({
     from: process.env.SMTP_FROM ?? "SQSecure Alerts <alerts@sqsecure.local>",
     to,
-    subject: severitySummaryLine(findings),
+    subject: severitySummaryLine(items, groupLabel),
     text: lines.join("\n"),
   });
 }

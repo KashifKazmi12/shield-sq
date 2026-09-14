@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { DataTable, type DataTableColumn } from "./DataTable";
 import { Drawer } from "./Drawer";
 import { FindingStatusBadge, SeverityBadge } from "./SeverityBadge";
+import { AiExplainPanel } from "./AiExplainPanel";
 import {
   formatFindingLifetime,
   lifecycleEventsFromIntervals,
@@ -20,6 +21,8 @@ type TrivyFinding = {
   detectedAt: Date | string;
   status: string;
   openIntervals: unknown;
+  aiPriorityScore: number | null;
+  aiPriorityReason: string | null;
   scan: {
     repo: string | null;
     branch: string | null;
@@ -46,7 +49,13 @@ function formatEventLabel(type: string) {
   return "Opened";
 }
 
-export function TrivyFindingsTable({ findings }: { findings: TrivyFinding[] }) {
+export function TrivyFindingsTable({
+  findings,
+  aiAvailable = false,
+}: {
+  findings: TrivyFinding[];
+  aiAvailable?: boolean;
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const selected = findings.find((f) => f.id === selectedId) ?? null;
@@ -119,7 +128,22 @@ export function TrivyFindingsTable({ findings }: { findings: TrivyFinding[] }) {
               <dd>{selected.scan.pipelineId ?? "—"}</dd>
               <dt>First detected</dt>
               <dd>{new Date(selected.detectedAt).toLocaleString()}</dd>
+              {selected.aiPriorityScore != null && (
+                <>
+                  <dt>AI priority</dt>
+                  <dd>
+                    {selected.aiPriorityScore}/100
+                    {selected.aiPriorityReason ? ` — ${selected.aiPriorityReason}` : ""}
+                  </dd>
+                </>
+              )}
             </dl>
+
+            {aiAvailable && (
+              <div className="section">
+                <AiExplainPanel key={selected.id} findingId={selected.id} />
+              </div>
+            )}
 
             <h4 style={{ margin: "20px 0 8px", fontSize: 13, fontWeight: 600 }}>History</h4>
             {timeline.length === 0 ? (

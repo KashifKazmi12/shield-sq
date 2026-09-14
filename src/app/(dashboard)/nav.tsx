@@ -10,6 +10,7 @@ import {
   usePendingRouter,
 } from "@/components/NavigationPending";
 import { ProjectSelect } from "@/components/ProjectSelect";
+import { AiChatWidget } from "@/components/AiChatWidget";
 import { UserMenu } from "./UserMenu";
 
 function Icon({ children }: { children: ReactNode }) {
@@ -170,6 +171,7 @@ export function DashboardShell({
   role,
   companyName,
   features = [],
+  aiAssistantReady = false,
   children,
 }: {
   email?: string | null;
@@ -178,6 +180,7 @@ export function DashboardShell({
   role?: string;
   companyName?: string | null;
   features?: string[];
+  aiAssistantReady?: boolean;
   children: ReactNode;
 }) {
   const [navOpen, setNavOpen] = useState(false);
@@ -227,6 +230,7 @@ export function DashboardShell({
           <NavigationPendingUI />
         </main>
       </div>
+      {features.includes("ai_assistant") && aiAssistantReady && <AiChatWidget email={email} />}
     </NavigationPendingProvider>
   );
 }

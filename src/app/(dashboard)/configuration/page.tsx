@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isSecretsKeyConfigured } from "@/lib/secrets";
 import { ensureProviderConfigRows, getProviderUsage } from "./actions";
 import { ConfigurationManager } from "./ConfigurationManager";
 
@@ -21,7 +22,12 @@ export default async function ConfigurationPage() {
   return (
     <div>
       <h2 className="page-title">Configuration</h2>
-      <ConfigurationManager providers={providers} limits={limits} initialUsage={usage} />
+      <ConfigurationManager
+        providers={providers}
+        limits={limits}
+        initialUsage={usage}
+        secretsKeyConfigured={isSecretsKeyConfigured()}
+      />
     </div>
   );
 }
