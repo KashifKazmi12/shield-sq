@@ -292,8 +292,11 @@ export async function listTrivyFindings(projectId: string, filters: FindingFilte
       ...(filters.cursor ? { cursor: { id: filters.cursor }, skip: 1 } : {}),
       orderBy:
         filters.sort === "priority"
-          ? [{ aiPriorityScore: { sort: "desc", nulls: "last" } }, { detectedAt: "desc" }]
-          : { detectedAt: "desc" },
+          ? ([
+              { aiPriorityScore: { sort: "desc", nulls: "last" } },
+              { detectedAt: "desc" },
+            ] as const)
+          : { detectedAt: "desc" as const },
       include: { scan: { select: { repo: true, branch: true, commitSha: true, pipelineId: true, createdAt: true } } },
     }),
     prisma.finding.count({ where }),
