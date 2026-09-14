@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import type { AiProvider } from "@prisma/client";
+import type { AiProvider } from "@/generated/prisma";
 import {
   getAiProviderConfigs,
   updateAiApiKey,

@@ -10,7 +10,7 @@ import {
   updateCompanyFeatures,
   setCompanyOwner,
 } from "./actions";
-import type { CompanyFeature } from "@prisma/client";
+import type { CompanyFeature } from "@/generated/prisma";
 
 const FEATURE_OPTIONS: { value: CompanyFeature; label: string }[] = [
   { value: "vulnerabilities", label: "Vulnerabilities" },

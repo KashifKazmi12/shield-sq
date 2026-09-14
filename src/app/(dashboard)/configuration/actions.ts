@@ -11,7 +11,7 @@ import {
   ProviderNotUsableError,
 } from "@/lib/leak-providers";
 import { PROVIDER_IDS } from "@/lib/leak-provider-meta";
-import type { LeakProvider } from "@prisma/client";
+import type { LeakProvider } from "@/generated/prisma";
 
 // Ensures every registered provider (see PROVIDER_REGISTRY in
 // leak-providers.ts) has a config row so the page always has exactly one row

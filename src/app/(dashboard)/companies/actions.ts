@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { generateTempPassword } from "@/lib/token";
 import { requireSuperAdmin } from "@/lib/rbac";
-import type { CompanyFeature } from "@prisma/client";
+import type { CompanyFeature } from "@/generated/prisma";
 
 function validateFeatures(features: CompanyFeature[]) {
   if (!features.length) throw new Error("Select at least one feature");

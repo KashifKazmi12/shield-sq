@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import type { AiProvider } from "@prisma/client";
+import type { AiProvider } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireCompanyFeature } from "@/lib/rbac";
 import { logAdminAction } from "@/lib/audit";

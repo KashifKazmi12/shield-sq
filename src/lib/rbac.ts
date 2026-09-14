@@ -1,7 +1,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "./auth";
 import { prisma } from "./prisma";
-import type { CompanyFeature } from "@prisma/client";
+import type { CompanyFeature } from "@/generated/prisma";
 
 export class ForbiddenError extends Error {
   constructor(message: string) {

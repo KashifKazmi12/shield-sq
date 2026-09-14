@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/generated/prisma";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireCompanyFeature } from "@/lib/rbac";
 import { requireCompanySession } from "@/lib/session";

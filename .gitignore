@@ -8,3 +8,6 @@ dist/
 *.db-journal
 tsconfig.tsbuildinfo
 docker-compose.override.yml
+# Prisma Client is generated into src/ (see prisma/schema.prisma output) —
+# never commit engine binaries; `postinstall` / `vercel-build` regenerate it.
+src/generated/prisma/

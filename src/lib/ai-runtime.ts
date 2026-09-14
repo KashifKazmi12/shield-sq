@@ -1,4 +1,4 @@
-import type { AiProvider } from "@prisma/client";
+import type { AiProvider } from "@/generated/prisma";
 import { prisma } from "./prisma";
 import { decryptSecret } from "./secrets";
 import { completeText, AiProviderCallError } from "./ai-client";

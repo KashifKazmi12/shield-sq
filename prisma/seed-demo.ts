@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "../src/generated/prisma";
 import bcrypt from "bcryptjs";
 import { generateIngestToken, hashToken } from "../src/lib/token";
 import { falcoBucketStart, falcoScanIdempotencyKey, falcoDedupeKey } from "../src/lib/falco";

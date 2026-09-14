@@ -1,5 +1,9 @@
 generator client {
-  provider      = "prisma-client-js"
+  provider = "prisma-client-js"
+  // Generate outside node_modules so Vercel's dependency cache can't serve a
+  // stale Prisma Client (missing models/fields → TS2339 on deploy).
+  // Import from "@/generated/prisma" — not "@prisma/client".
+  output = "../src/generated/prisma"
   // "native" for local dev/Docker; "rhel-openssl-3.0.x" is what Vercel's
   // Node.js serverless functions run on (Amazon Linux 2) — without it,
   // Prisma works locally but throws "query engine not found" in prod on
@@ -30,6 +34,14 @@ enum CompanyFeature {
   runtime_alerts
   leak_checking
   url_monitoring
+  ai_assistant
+}
+
+enum AiProvider {
+  anthropic
+  openai
+  xai
+  google
 }
 
 enum LeakIdentifierType {
@@ -50,69 +62,73 @@ enum LeakProvider {
 }
 
 model Company {
-  id           String            @id @default(cuid())
-  name         String
-  slug         String            @unique
-  createdAt    DateTime          @default(now())
+  id                  String                     @id @default(cuid())
+  name                String
+  slug                String                     @unique
+  createdAt           DateTime                   @default(now())
   // Set to block login for every user in this company without deleting data.
-  suspendedAt  DateTime?
-  features     CompanyFeature[]  @default([])
+  suspendedAt         DateTime?
+  features            CompanyFeature[]           @default([])
   // The single admin the super admin treats as this company's point of
   // contact — set to the admin created alongside the company, used by
   // resetCompanyAdminPassword so "reset the admin password" always targets
   // one specific person even once a company has several admins (see
   // settings/actions.ts's team management, which allows more than one).
-  ownerId      String?           @unique
-  owner        User?             @relation("CompanyOwner", fields: [ownerId], references: [id])
-  users        User[]            @relation("CompanyUsers")
-  projects     Project[]
+  ownerId             String?                    @unique
+  owner               User?                      @relation("CompanyOwner", fields: [ownerId], references: [id])
+  users               User[]                     @relation("CompanyUsers")
+  projects            Project[]
   monitoredIdentities MonitoredIdentity[]
   monitoredSites      MonitoredSite[]
   leakProviderUsage   LeakProviderUsage[]
+  notificationConfig  CompanyNotificationConfig?
+  aiProviderConfigs   AiProviderConfig[]
+  aiUsageLogs         AiUsageLog[]
+  aiInsights          AiInsight[]
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  role         Role      @default(viewer)
+  id                         String               @id @default(cuid())
+  email                      String               @unique
+  passwordHash               String
+  role                       Role                 @default(viewer)
   // Null only for super_admin — every admin/viewer belongs to one company.
-  companyId    String?
-  company      Company?  @relation("CompanyUsers", fields: [companyId], references: [id])
-  ownerOfCompany Company? @relation("CompanyOwner")
-  createdAt    DateTime  @default(now())
+  companyId                  String?
+  company                    Company?             @relation("CompanyUsers", fields: [companyId], references: [id])
+  ownerOfCompany             Company?             @relation("CompanyOwner")
+  createdAt                  DateTime             @default(now())
   // Set once the first-login setup wizard is completed. Gates the
   // /onboarding redirect for admins; viewers never see the wizard.
-  onboardedAt  DateTime?
-  createdLeakIdentities MonitoredIdentity[]
-  leakProviderUsage     LeakProviderUsage[]
+  onboardedAt                DateTime?
+  createdLeakIdentities      MonitoredIdentity[]
+  leakProviderUsage          LeakProviderUsage[]
   updatedLeakProviderConfigs LeakProviderConfig[]
 
   @@index([companyId])
 }
 
 model Project {
-  id            String              @id @default(cuid())
-  companyId     String
-  company       Company             @relation(fields: [companyId], references: [id])
-  name          String
-  createdAt     DateTime            @default(now())
-  scans         Scan[]
-  findings      Finding[]
-  tokens        IngestToken[]
-  notifyConfig  NotificationConfig?
+  id           String              @id @default(cuid())
+  companyId    String
+  company      Company             @relation(fields: [companyId], references: [id])
+  name         String
+  createdAt    DateTime            @default(now())
+  scans        Scan[]
+  findings     Finding[]
+  tokens       IngestToken[]
+  notifyConfig NotificationConfig?
 
   @@index([companyId])
 }
 
 model IngestToken {
-  id         String    @id @default(cuid())
-  projectId  String
-  project    Project   @relation(fields: [projectId], references: [id])
-  tokenHash  String    @unique
-  label      String?
-  createdAt  DateTime  @default(now())
-  revokedAt  DateTime?
+  id        String    @id @default(cuid())
+  projectId String
+  project   Project   @relation(fields: [projectId], references: [id])
+  tokenHash String    @unique
+  label     String?
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
 
   @@index([projectId])
 }
@@ -140,39 +156,46 @@ model Scan {
 }
 
 model Finding {
-  id            String              @id @default(cuid())
+  id               String              @id @default(cuid())
   // First scan that created this finding — never moved when later runs
   // re-report the same CVE (see ScanFinding for per-run history).
-  scanId        String
-  scan          Scan                @relation(fields: [scanId], references: [id])
+  scanId           String
+  scan             Scan                @relation(fields: [scanId], references: [id])
   // Denormalized from scan.projectId — exists specifically so dedupeKey's
   // uniqueness below can be scoped per project, not global. Without it, two
   // different projects/companies whose Falco alerts ever produced the same
   // content (e.g. the same fixture posted to two projects in testing) would
   // collide: the second project's ingest would silently report the first
   // project's finding as "already deduped" instead of creating its own.
-  projectId     String
-  project       Project             @relation(fields: [projectId], references: [id])
-  tool          String // "trivy" | "falco"
-  severity      String // "critical" | "high" | "medium" | "low" | "info"
-  title         String
-  description   String?
-  resource      String?
-  fixedVersion  String?
-  ruleName      String?
-  detectedAt    DateTime            @default(now())
+  projectId        String
+  project          Project             @relation(fields: [projectId], references: [id])
+  tool             String // "trivy" | "falco"
+  severity         String // "critical" | "high" | "medium" | "low" | "info"
+  title            String
+  description      String?
+  resource         String?
+  fixedVersion     String?
+  ruleName         String?
+  detectedAt       DateTime            @default(now())
   // opened | resolved | reopened — Trivy lifecycle (Falco stays opened for now).
-  status        String              @default("opened")
+  status           String              @default("opened")
   // Periods the finding was actively open. Lifetime = sum of these intervals
   // (resolved gaps do not count). Shape: [{ start: ISO, end: ISO | null }].
-  openIntervals Json                @default("[]")
+  openIntervals    Json                @default("[]")
   // Dedupe key scoped to (projectId, dedupeKey) — see the projectId comment
   // above. Falco: alert UUID when present, else a hash of (rule, output,
   // timestamp). Trivy: stable key of (CVE, package, target) so a later CI
   // run that reports the same vuln does not insert a duplicate Finding.
-  dedupeKey     String?
-  notifications AlertNotification[]
-  observations  ScanFinding[]
+  dedupeKey        String?
+  // Structured raw context a tool provided beyond the flattened `resource`
+  // string — e.g. Falco's output_fields (pod/namespace/container/syscall
+  // detail). Null for tools that have none to offer.
+  rawContext       Json?
+  // AI Triage output (src/lib/ai-runtime.ts) — both null until triaged.
+  aiPriorityScore  Int?
+  aiPriorityReason String?
+  notifications    AlertNotification[]
+  observations     ScanFinding[]
 
   @@unique([projectId, dedupeKey])
   @@index([scanId])
@@ -209,24 +232,24 @@ model AlertNotification {
 }
 
 model NotificationConfig {
-  id                 String   @id @default(cuid())
-  projectId          String   @unique
-  project            Project  @relation(fields: [projectId], references: [id])
-  slackWebhookUrl    String?
-  notifyEmail        String?
-  severityThreshold  String   @default("critical") // minimum severity that triggers a notification
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default(cuid())
+  projectId         String   @unique
+  project           Project  @relation(fields: [projectId], references: [id])
+  slackWebhookUrl   String?
+  notifyEmail       String?
+  severityThreshold String   @default("critical") // minimum severity that triggers a notification
+  updatedAt         DateTime @updatedAt
 }
 
 // Audit trail for rejected ingestion requests (bad token, malformed body) —
 // needed to debug client pipeline misconfigurations without granting log access.
 model IngestAuditLog {
-  id         String   @id @default(cuid())
-  source     String // "trivy" | "falco"
-  projectId  String?
-  reason     String // e.g. "invalid_token" | "malformed_payload" | "rate_limited"
-  detail     String?
-  createdAt  DateTime @default(now())
+  id        String   @id @default(cuid())
+  source    String // "trivy" | "falco"
+  projectId String?
+  reason    String // e.g. "invalid_token" | "malformed_payload" | "rate_limited"
+  detail    String?
+  createdAt DateTime @default(now())
 
   @@index([source, createdAt])
 }
@@ -252,68 +275,140 @@ model AdminAuditLog {
 // A monitored email/username, company-scoped (not project-scoped — unlike
 // Trivy/Falco findings, a leaked credential isn't tied to a codebase/repo).
 model MonitoredIdentity {
-  id                String              @id @default(cuid())
+  id                String             @id @default(cuid())
   companyId         String
-  company           Company             @relation(fields: [companyId], references: [id])
+  company           Company            @relation(fields: [companyId], references: [id])
   createdById       String?
-  createdBy         User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy         User?              @relation(fields: [createdById], references: [id], onDelete: SetNull)
   identifierType    LeakIdentifierType
   identifierValue   String
-  status            MonitorStatus       @default(pending)
-  checkIntervalMins Int                 @default(1440)
+  status            MonitorStatus      @default(pending)
+  checkIntervalMins Int                @default(1440)
   lastCheckedAt     DateTime?
   nextCheckAt       DateTime?
   lastError         String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   findings          LeakFinding[]
+  dnsFindings       IdentityFinding[]
 
   @@unique([companyId, identifierType, identifierValue])
   @@index([nextCheckAt])
 }
 
 model LeakFinding {
-  id         String            @id @default(cuid())
-  identityId String
-  identity   MonitoredIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
-  source     String // "checkleaked" | "leakcheck"
-  breachName String
-  severity   String            @default("medium") // "low" | "medium" | "high" — see computeSeverity()
-  leakedAt   DateTime?
+  id                 String            @id @default(cuid())
+  identityId         String
+  identity           MonitoredIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  source             String // "checkleaked" | "leakcheck"
+  breachName         String
+  severity           String            @default("medium") // "low" | "medium" | "high" — see computeSeverity()
+  leakedAt           DateTime?
   // sha256(source + breachName + a stable field from the raw entry) — see
   // src/lib/leak-providers.ts. Prevents an unbounded number of duplicate
   // rows when the same identity is re-synced against the same breach.
-  dedupeKey  String
+  dedupeKey          String
   // Raw provider entry, with credential-like fields (password) masked
   // before storage — see maskSecret() in leak-providers.ts. Kept for
   // severity computation/display, never round-trips a cleartext secret.
-  details    Json?
+  details            Json?
   // The real leaked password, encrypted (AES-256-GCM, src/lib/secrets.ts) —
   // null when the provider didn't return one for this entry. Decrypted only
   // by revealFindingPassword, on demand, never included in the findings
   // list payload.
   passwordCiphertext String?
-  createdAt  DateTime          @default(now())
+  // Breached Password Checker: whether this finding's raw password (if any)
+  // also matched HaveIBeenPwned's free, keyless Pwned Passwords k-anonymity
+  // API — see src/lib/pwned-passwords.ts. Null when there was no password to
+  // check (never round-trips the password itself, only a match count).
+  passwordPwned      Boolean?
+  passwordPwnedCount Int?
+  createdAt          DateTime          @default(now())
 
   @@unique([identityId, dedupeKey])
   @@index([identityId, source, breachName])
 }
 
+// DNS Security Checker (SPF/DMARC/DKIM) findings for a monitored email
+// identity's domain — mirrors SiteFinding's shape (severity/title/dedupeKey)
+// for the same reason: a small, dashboard-friendly finding shape distinct
+// from LeakFinding's breach-record shape.
+model IdentityFinding {
+  id          String            @id @default(cuid())
+  identityId  String
+  identity    MonitoredIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  type        String // "spf_missing" | "dmarc_missing" | "dkim_missing"
+  severity    String
+  title       String
+  description String?
+  status      String            @default("opened") // opened | resolved — same lifecycle idea as Finding/SiteFinding
+  detectedAt  DateTime          @default(now())
+  dedupeKey   String
+
+  @@unique([identityId, dedupeKey])
+  @@index([identityId, type, status])
+}
+
+// Company-scoped alert delivery for Leak Checking findings (LeakFinding) and
+// identity DNS findings (IdentityFinding) — the project-scoped
+// NotificationConfig above can't be reused here because MonitoredIdentity is
+// company-scoped, not project-scoped (a leaked credential isn't tied to a
+// codebase/repo, same reasoning as MonitoredIdentity's own comment above).
+model CompanyNotificationConfig {
+  id                String   @id @default(cuid())
+  companyId         String   @unique
+  company           Company  @relation(fields: [companyId], references: [id])
+  slackWebhookUrl   String?
+  notifyEmail       String?
+  severityThreshold String   @default("high") // LeakFinding/IdentityFinding severities: low | medium | high (no "critical"/"info")
+  updatedAt         DateTime @updatedAt
+}
+
 // --- URL Monitoring ---------------------------------------------------------
 
 model MonitoredSite {
-  id        String              @id @default(cuid())
-  companyId String
-  company   Company             @relation(fields: [companyId], references: [id])
-  url       String
-  domain    String
-  createdAt DateTime            @default(now())
-  updatedAt DateTime            @updatedAt
-  endpoints MonitoredEndpoint[]
-  scans     SiteScanResult[]
+  id                String              @id @default(cuid())
+  companyId         String
+  company           Company             @relation(fields: [companyId], references: [id])
+  url               String
+  domain            String
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  endpoints         MonitoredEndpoint[]
+  scans             SiteScanResult[]
+  findings          SiteFinding[]
+  // Scheduling fields for the cron-driven rescan sweep (src/app/api/cron/
+  // url-rescans/route.ts) — mirrors MonitoredIdentity's checkIntervalMins/
+  // nextCheckAt/lastCheckedAt pattern above, which the same cron gap in
+  // GAPS.md already established for leak checking.
+  checkIntervalMins Int                 @default(1440)
+  lastCheckedAt     DateTime?
+  nextCheckAt       DateTime?
 
   @@unique([companyId, url])
   @@index([companyId, domain])
+  @@index([nextCheckAt])
+}
+
+// SSL/TLS certificate, CAA record, and subdomain-discovery findings for a
+// MonitoredSite — deliberately a separate model from SiteScanResult, which
+// is health-check-shaped (statusCode/latencyMs) with no severity/title
+// concept. Mirrors the Finding model's shape (severity/title/dedupeKey) so
+// the same DataTable/FilterBar dashboard pattern applies here too.
+model SiteFinding {
+  id          String        @id @default(cuid())
+  siteId      String
+  site        MonitoredSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  type        String // "ssl_cert" | "caa_record" | "subdomain"
+  severity    String // "critical" | "high" | "medium" | "low" | "info"
+  title       String
+  description String?
+  status      String        @default("opened") // opened | resolved | reopened — same lifecycle as Finding
+  detectedAt  DateTime      @default(now())
+  dedupeKey   String
+
+  @@unique([siteId, dedupeKey])
+  @@index([siteId, type, status])
 }
 
 model MonitoredEndpoint {
@@ -399,4 +494,59 @@ model LeakProviderLimits {
   perCompanyDailyLimit Int?
   perUserDailyLimit    Int?
   updatedAt            DateTime @updatedAt
+}
+
+// --- AI Assistant (company-configured provider) -----------------------------
+
+// One row per (company, provider) — a company can configure all 4
+// providers at once, each with its own key/model, with exactly one
+// `isActive` at a time.
+model AiProviderConfig {
+  id               String     @id @default(cuid())
+  companyId        String
+  company          Company    @relation(fields: [companyId], references: [id])
+  provider         AiProvider
+  apiKeyCiphertext String?
+  apiKeyPreview    String?
+  model            String?
+  isActive         Boolean    @default(false)
+  updatedAt        DateTime   @updatedAt
+
+  @@unique([companyId, provider])
+  @@index([companyId, isActive])
+}
+
+model AiUsageLog {
+  id               String     @id @default(cuid())
+  companyId        String
+  company          Company    @relation(fields: [companyId], references: [id])
+  provider         AiProvider
+  model            String
+  promptTokens     Int?
+  completionTokens Int?
+  totalTokens      Int?
+  success          Boolean
+  detail           String?
+  createdAt        DateTime   @default(now())
+
+  @@index([companyId, createdAt])
+}
+
+// Every AI-generated output (explanation/priority/correlation/chat answer),
+// kept separate from Finding's own ground-truth fields — an incorrect AI
+// summary can never silently become the system of record. Also doubles as
+// a cache: an explanation already generated for a finding isn't re-requested.
+model AiInsight {
+  id        String     @id @default(cuid())
+  companyId String
+  company   Company    @relation(fields: [companyId], references: [id])
+  kind      String // "explanation" | "priority" | "correlation" | "chat"
+  findingId String? // set for explanation/priority/correlation; null for chat
+  provider  AiProvider
+  model     String
+  prompt    String
+  content   String
+  createdAt DateTime   @default(now())
+
+  @@index([companyId, findingId])
 }

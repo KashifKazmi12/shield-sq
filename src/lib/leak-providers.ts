@@ -3,7 +3,7 @@ import { prisma } from "./prisma";
 import { decryptSecret } from "./secrets";
 import { checkRateLimit } from "./rate-limit";
 import { PROVIDER_LABELS } from "./leak-provider-meta";
-import type { LeakIdentifierType, LeakProvider } from "@prisma/client";
+import type { LeakIdentifierType, LeakProvider } from "@/generated/prisma";
 
 export { PROVIDER_IDS } from "./leak-provider-meta";
 

@@ -1,4 +1,4 @@
-import type { AiProvider } from "@prisma/client";
+import type { AiProvider } from "@/generated/prisma";
 
 export const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
   anthropic: "Anthropic (Claude)",

@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "./auth";
 import { prisma } from "./prisma";
 import { hasFeature } from "./rbac";
-import type { CompanyFeature } from "@prisma/client";
+import type { CompanyFeature } from "@/generated/prisma";
 
 // Company-scoped pages (Vulnerabilities, Runtime Alerts, Pipeline
 // Runs, Trends, Settings, onboarding) all need the same guard: a signed-in

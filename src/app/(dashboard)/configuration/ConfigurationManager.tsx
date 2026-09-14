@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { DataTable } from "@/components/DataTable";
-import type { LeakProvider } from "@prisma/client";
+import type { LeakProvider } from "@/generated/prisma";
 import {
   updateProviderKey,
   clearProviderKey,

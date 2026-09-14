@@ -1,4 +1,4 @@
-import type { LeakProvider } from "@prisma/client";
+import type { LeakProvider } from "@/generated/prisma";
 
 // Client-safe provider metadata — no Prisma Client/crypto imports, so this is
 // the one thing both the server-side registry (leak-providers.ts) and the

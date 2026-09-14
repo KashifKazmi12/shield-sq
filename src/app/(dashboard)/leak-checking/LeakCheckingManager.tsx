@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import { DataTable } from "@/components/DataTable";
 import { Drawer } from "@/components/Drawer";
 import { SeverityBadge } from "@/components/SeverityBadge";
-import type { LeakIdentifierType } from "@prisma/client";
+import type { LeakIdentifierType } from "@/generated/prisma";
 import { createIdentity, syncIdentity, deleteIdentity, listFindings, revealFindingPassword } from "./actions";
 
 type Identity = {
