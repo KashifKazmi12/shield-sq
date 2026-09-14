@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import {
   Activity,
   ArrowRight,
@@ -344,15 +344,35 @@ export function LandingPage() {
     const body = document.body;
     const prevHtmlBg = html.style.backgroundColor;
     const prevBodyBg = body.style.backgroundColor;
+    const prevScrollBehavior = html.style.scrollBehavior;
     html.style.backgroundColor = "#0d1a3d";
     body.style.backgroundColor = "#0d1a3d";
+    html.style.scrollBehavior = "auto";
 
     return () => {
       window.removeEventListener("scroll", onScroll);
       html.style.backgroundColor = prevHtmlBg;
       body.style.backgroundColor = prevBodyBg;
+      html.style.scrollBehavior = prevScrollBehavior;
     };
   }, []);
+
+  function jumpTo(e: MouseEvent<HTMLAnchorElement>, href: string) {
+    if (!href.startsWith("#")) return;
+    e.preventDefault();
+    const id = href.slice(1);
+    if (id === "top") {
+      window.scrollTo({ top: 0, behavior: "auto" });
+      history.replaceState(null, "", "#top");
+      return;
+    }
+    const el = document.getElementById(id);
+    if (!el) return;
+    const headerOffset = 58;
+    const top = el.getBoundingClientRect().top + window.scrollY - headerOffset;
+    window.scrollTo({ top, behavior: "auto" });
+    history.replaceState(null, "", href);
+  }
 
   function handleContactSubmit(e: FormEvent) {
     e.preventDefault();
@@ -366,20 +386,30 @@ export function LandingPage() {
   return (
     <div className="lp">
       <header className={`lp-bar${scrolled ? " scrolled" : ""}`}>
-        <div className="lp-inner lp-bar-row">
-          <a className="lp-brand" href="#top">
+        <div className="lp-bar-row">
+          <a className="lp-brand" href="#top" onClick={(e) => jumpTo(e, "#top")}>
             <Logo size={28} color="#1a61ff" />
             <span>SQSecure</span>
           </a>
           <nav className="lp-nav" aria-label="Primary">
-            <a href="#vulnerabilities">Features</a>
-            <a href="#sam">Sam</a>
-            <a href="#how">How it works</a>
-            <a href="#pricing">Pricing</a>
-            <a href="#contact">Contact</a>
+            <a href="#vulnerabilities" onClick={(e) => jumpTo(e, "#vulnerabilities")}>
+              Features
+            </a>
+            <a href="#sam" onClick={(e) => jumpTo(e, "#sam")}>
+              Sam
+            </a>
+            <a href="#how" onClick={(e) => jumpTo(e, "#how")}>
+              How it works
+            </a>
+            <a href="#pricing" onClick={(e) => jumpTo(e, "#pricing")}>
+              Pricing
+            </a>
+            <a href="#contact" onClick={(e) => jumpTo(e, "#contact")}>
+              Contact
+            </a>
           </nav>
           <div className="lp-bar-actions">
-            <Link className="lp-btn lp-btn-ghost" href="/login">
+            <Link className="lp-btn lp-btn-login" href="/login">
               Log in
             </Link>
           </div>
@@ -401,7 +431,7 @@ export function LandingPage() {
               backgroundImage:
                 "linear-gradient(90deg, #0d1a3d 0%, #0d1a3d 34%, rgba(13, 26, 61, 0.55) 52%, rgba(13, 26, 61, 0.15) 68%, transparent 82%), url(/hero-security.png)",
               backgroundSize: "cover",
-              backgroundPosition: "right center",
+              backgroundPosition: "68% center",
               backgroundRepeat: "no-repeat",
             }}
           />
@@ -416,11 +446,15 @@ export function LandingPage() {
                 protecting what counts.
               </p>
               <div className="lp-actions">
-                <a className="lp-btn lp-btn-primary" href="#contact">
+                <a className="lp-btn lp-btn-primary" href="#contact" onClick={(e) => jumpTo(e, "#contact")}>
                   Request early access
                   <ArrowRight size={16} strokeWidth={2.25} />
                 </a>
-                <a className="lp-btn lp-btn-hero-secondary" href="#vulnerabilities">
+                <a
+                  className="lp-btn lp-btn-hero-secondary"
+                  href="#vulnerabilities"
+                  onClick={(e) => jumpTo(e, "#vulnerabilities")}
+                >
                   Explore features
                 </a>
               </div>
@@ -494,7 +528,7 @@ export function LandingPage() {
             <aside className="lp-chat" aria-hidden="true">
               <div className="lp-chat-head">
                 <span className="lp-chat-avatar">
-                  <Bot size={18} strokeWidth={2} />
+                  <Bot size={18} strokeWidth={2} color="#fff" />
                 </span>
                 <div>
                   <strong>Sam</strong>
@@ -516,16 +550,19 @@ export function LandingPage() {
             <p>Three steps from scattered alerts to a security view your whole team can use.</p>
           </div>
           <ol className="lp-steps">
-            {STEPS.map(({ n, title, body, icon: Icon }) => (
+            {STEPS.map(({ n, title, body, icon: Icon }, i) => (
               <li key={n}>
-                <div className="lp-step-top">
+                <div className="lp-step-rail">
                   <span className="lp-step-n">{n}</span>
-                  <span className="lp-step-icon">
-                    <Icon size={16} strokeWidth={2} />
-                  </span>
+                  {i < STEPS.length - 1 && <span className="lp-step-connector" aria-hidden="true" />}
                 </div>
-                <h3>{title}</h3>
-                <p>{body}</p>
+                <div className="lp-step-body">
+                  <span className="lp-step-icon">
+                    <Icon size={18} strokeWidth={2} />
+                  </span>
+                  <h3>{title}</h3>
+                  <p>{body}</p>
+                </div>
               </li>
             ))}
           </ol>
@@ -677,6 +714,9 @@ export function LandingPage() {
           --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
           --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial,
             sans-serif;
+          --lp-gutter: 64px;
+          --lp-section-y: 80px;
+          --lp-col-gap: 64px;
 
           min-height: 100vh;
           background: #0d1a3d;
@@ -687,9 +727,9 @@ export function LandingPage() {
         }
 
         .lp-inner {
-          max-width: 1080px;
+          max-width: none;
           margin: 0 auto;
-          padding-inline: 24px;
+          padding-inline: var(--lp-gutter);
         }
 
         .lp-bar {
@@ -700,8 +740,8 @@ export function LandingPage() {
           border-bottom: 0;
           box-shadow: none;
           transition:
-            background 0.22s ease,
-            box-shadow 0.22s ease;
+            background 0.18s ease,
+            box-shadow 0.18s ease;
         }
 
         .lp-bar.scrolled {
@@ -716,17 +756,18 @@ export function LandingPage() {
           color: #fff;
           isolation: isolate;
           margin-top: -58px;
-          padding-top: 58px;
-          min-height: min(88vh, 760px);
+          min-height: 560px;
           display: flex;
           align-items: center;
         }
 
         .lp-bar-row {
           height: 58px;
+          width: 100%;
           display: flex;
           align-items: center;
           gap: 20px;
+          padding-inline: var(--lp-gutter);
         }
 
         .lp-brand {
@@ -742,8 +783,9 @@ export function LandingPage() {
 
         .lp-nav {
           display: flex;
-          gap: 18px;
-          margin-left: 8px;
+          align-items: center;
+          gap: 22px;
+          margin-left: 12px;
           flex: 1;
         }
 
@@ -752,6 +794,7 @@ export function LandingPage() {
           font-size: 13.5px;
           font-weight: 500;
           text-decoration: none !important;
+          white-space: nowrap;
         }
 
         .lp-nav a:hover {
@@ -771,7 +814,7 @@ export function LandingPage() {
           justify-content: center;
           gap: 6px;
           padding: 8px 14px;
-          border-radius: var(--radius);
+          border-radius: 6px;
           border: 1px solid var(--border);
           background: var(--subtle);
           color: var(--fg);
@@ -779,7 +822,7 @@ export function LandingPage() {
           font-weight: 600;
           text-decoration: none !important;
           line-height: 1.2;
-          transition: background 0.12s ease, border-color 0.12s ease;
+          transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
         }
 
         .lp :global(.lp-btn:hover) {
@@ -795,6 +838,21 @@ export function LandingPage() {
 
         .lp :global(.lp-btn-primary:hover) {
           background: #1a7f37;
+        }
+
+        /* Solid fill so Log in stays readable over the bright hero glow */
+        .lp :global(.lp-btn-login) {
+          background: #fff;
+          border-color: #fff;
+          color: #0d1a3d;
+          padding: 7px 14px;
+          font-size: 13px;
+        }
+
+        .lp :global(.lp-btn-login:hover) {
+          background: #edf2ff;
+          border-color: #edf2ff;
+          color: #0d1a3d;
         }
 
         .lp :global(.lp-btn-ghost) {
@@ -841,7 +899,10 @@ export function LandingPage() {
           position: relative;
           z-index: 1;
           width: 100%;
-          padding-block: 88px 96px;
+          max-width: none;
+          margin: 0;
+          padding-block: var(--lp-section-y);
+          padding-inline: var(--lp-gutter);
         }
 
         .lp-hero-stage > .lp-inner {
@@ -849,33 +910,33 @@ export function LandingPage() {
         }
 
         .lp-hero-copy {
-          max-width: 640px;
+          max-width: 760px;
         }
 
         .lp-kicker {
           margin: 0;
           font-size: 12px;
           font-weight: 650;
-          letter-spacing: 0.08em;
+          letter-spacing: 0.04em;
           text-transform: uppercase;
-          color: #8b949e;
+          color: rgba(255, 255, 255, 0.62);
         }
 
         .lp-hero h1 {
           margin: 14px 0 0;
           font-size: clamp(34px, 5vw, 52px);
           font-weight: 750;
-          letter-spacing: -0.035em;
-          line-height: 1.1;
-          max-width: 14ch;
+          letter-spacing: -0.025em;
+          line-height: 1.12;
+          max-width: 18ch;
           color: #fff;
         }
 
         .lp-lede {
           margin: 18px 0 0;
           color: rgba(255, 255, 255, 0.78);
-          font-size: 17px;
-          max-width: 46ch;
+          font-size: 16.5px;
+          max-width: 58ch;
           line-height: 1.55;
         }
 
@@ -883,19 +944,19 @@ export function LandingPage() {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
-          margin-top: 30px;
+          margin-top: 28px;
         }
 
         .lp-note {
           margin: 18px 0 0;
           font-size: 13px;
-          color: #8b949e;
+          color: rgba(255, 255, 255, 0.55);
         }
 
         .lp-spotlight {
-          padding-block: 88px;
+          padding-block: var(--lp-section-y);
           background: var(--canvas);
-          scroll-margin-top: 72px;
+          scroll-margin-top: 58px;
         }
 
         .lp-spotlight.tinted {
@@ -905,8 +966,8 @@ export function LandingPage() {
 
         .lp-spotlight-grid {
           display: grid;
-          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-          gap: 72px 80px;
+          grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+          gap: var(--lp-col-gap);
           align-items: center;
         }
 
@@ -923,7 +984,7 @@ export function LandingPage() {
         }
 
         .lp :global(.lp-spotlight-visual) {
-          padding-inline: 8px;
+          padding-inline: 0;
         }
 
         .lp-spotlight-eyebrow {
@@ -955,7 +1016,7 @@ export function LandingPage() {
           font-weight: 750;
           letter-spacing: -0.03em;
           line-height: 1.15;
-          max-width: 16ch;
+          max-width: 22ch;
           color: var(--fg);
         }
 
@@ -964,7 +1025,7 @@ export function LandingPage() {
           font-size: 16px;
           line-height: 1.55;
           color: var(--muted);
-          max-width: 48ch;
+          max-width: 62ch;
         }
 
         .lp-spotlight-points {
@@ -998,16 +1059,16 @@ export function LandingPage() {
         }
 
         .lp-sam {
-          padding-block: 72px;
+          padding-block: var(--lp-section-y);
           background: #0d1a3d;
           color: #fff;
-          scroll-margin-top: 72px;
+          scroll-margin-top: 58px;
         }
 
         .lp-sam-grid {
           display: grid;
-          grid-template-columns: 1.05fr 0.95fr;
-          gap: 40px;
+          grid-template-columns: 1.15fr 0.85fr;
+          gap: var(--lp-col-gap);
           align-items: center;
         }
 
@@ -1072,14 +1133,29 @@ export function LandingPage() {
         }
 
         .lp-chat-avatar {
+          position: relative;
           width: 36px;
           height: 36px;
           border-radius: 50%;
           background: var(--accent);
           color: #fff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
+          display: block;
+          flex-shrink: 0;
+          overflow: hidden;
+        }
+
+        .lp-chat-avatar :global(svg) {
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 0;
+          bottom: 0;
+          margin: auto;
+          display: block;
+          width: 18px;
+          height: 18px;
+          color: #fff;
+          stroke: #fff;
         }
 
         .lp-chat-head strong {
@@ -1118,12 +1194,12 @@ export function LandingPage() {
         .lp-band {
           background: var(--subtle);
           border-block: 1px solid var(--border-muted);
-          padding-block: 56px;
+          padding-block: var(--lp-section-y);
         }
 
         .lp-sec-head {
-          margin-bottom: 28px;
-          max-width: 560px;
+          margin-bottom: 32px;
+          max-width: 720px;
         }
 
         .lp-sec-head h2 {
@@ -1140,7 +1216,7 @@ export function LandingPage() {
         }
 
         .lp-how {
-          padding-block: 56px;
+          padding-block: var(--lp-section-y);
           background: var(--canvas);
         }
 
@@ -1149,50 +1225,96 @@ export function LandingPage() {
           margin: 0;
           padding: 0;
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 20px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 0;
         }
 
         .lp-steps li {
-          border-top: 2px solid var(--accent);
-          padding-top: 14px;
+          display: grid;
+          grid-template-rows: auto 1fr;
+          gap: 20px;
+          min-width: 0;
+          padding-right: 40px;
         }
 
-        .lp-step-top {
+        .lp-steps li:last-child {
+          padding-right: 0;
+        }
+
+        .lp-step-rail {
+          position: relative;
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          margin-bottom: 10px;
+          min-height: 40px;
         }
 
         .lp-step-n {
-          font-family: var(--mono);
-          font-size: 12px;
-          font-weight: 600;
+          position: relative;
+          z-index: 1;
+          display: inline-grid;
+          place-items: center;
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          background: var(--accent-soft);
           color: var(--accent);
+          font-family: var(--mono);
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          flex-shrink: 0;
+        }
+
+        .lp-step-connector {
+          position: absolute;
+          left: 40px;
+          right: -40px;
+          top: 50%;
+          height: 1px;
+          background: linear-gradient(90deg, var(--accent) 0%, #d0d7de 100%);
+          opacity: 0.55;
+          transform: translateY(-50%);
+        }
+
+        .lp-step-body {
+          min-width: 0;
         }
 
         .lp-step-icon {
-          color: var(--subtle-fg);
-          display: inline-flex;
+          display: inline-grid;
+          place-items: center;
+          width: 36px;
+          height: 36px;
+          margin-bottom: 12px;
+          border-radius: 8px;
+          background: #0d1a3d;
+          color: #fff;
+        }
+
+        .lp-step-icon :global(svg) {
+          display: block;
         }
 
         .lp-steps h3 {
           margin: 0;
-          font-size: 16px;
-          font-weight: 650;
+          font-size: 18px;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          color: var(--fg);
         }
 
         .lp-steps p {
-          margin: 8px 0 0;
-          font-size: 13.5px;
+          margin: 10px 0 0;
+          font-size: 14.5px;
+          line-height: 1.55;
           color: var(--muted);
+          max-width: 36ch;
         }
 
         .lp-pricing {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 14px;
+          gap: 24px;
           align-items: stretch;
         }
 
@@ -1267,14 +1389,14 @@ export function LandingPage() {
         .lp-cta {
           background: linear-gradient(165deg, #0d1a3d 0%, #11225a 50%, #0f37be 100%);
           color: #e6edf3;
-          padding-block: 72px;
-          scroll-margin-top: 72px;
+          padding-block: var(--lp-section-y);
+          scroll-margin-top: 58px;
         }
 
         .lp-contact {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 40px;
+          grid-template-columns: 1.05fr 0.95fr;
+          gap: var(--lp-col-gap);
           align-items: start;
         }
 
@@ -1301,7 +1423,7 @@ export function LandingPage() {
           color: rgba(255, 255, 255, 0.78);
           font-size: 15px;
           line-height: 1.55;
-          max-width: 42ch;
+          max-width: 56ch;
         }
 
         .lp-contact-perks {
@@ -1413,7 +1535,7 @@ export function LandingPage() {
 
         .lp-foot {
           border-top: 1px solid var(--border-muted);
-          padding-block: 22px;
+          padding-block: 28px;
           background: var(--canvas);
           color: var(--fg);
         }
@@ -1464,12 +1586,14 @@ export function LandingPage() {
         }
 
         @media (max-width: 900px) {
-          .lp-nav {
-            display: none;
+          .lp {
+            --lp-gutter: 20px;
+            --lp-section-y: 56px;
+            --lp-col-gap: 32px;
           }
 
-          .lp-hero {
-            padding-block: 64px 72px;
+          .lp-nav {
+            display: none;
           }
 
           .lp-hero h1 {
@@ -1483,8 +1607,41 @@ export function LandingPage() {
             grid-template-columns: 1fr;
           }
 
-          .lp-spotlight-grid {
-            gap: 40px;
+          .lp-steps li {
+            padding-right: 0;
+            grid-template-columns: 40px 1fr;
+            grid-template-rows: auto;
+            gap: 16px 18px;
+            padding-bottom: 28px;
+          }
+
+          .lp-steps li:last-child {
+            padding-bottom: 0;
+          }
+
+          .lp-step-rail {
+            flex-direction: column;
+            align-items: center;
+            min-height: 100%;
+          }
+
+          .lp-step-connector {
+            left: 50%;
+            right: auto;
+            top: 40px;
+            bottom: -28px;
+            width: 1px;
+            height: auto;
+            background: linear-gradient(180deg, var(--accent) 0%, #d0d7de 100%);
+            transform: translateX(-50%);
+          }
+
+          .lp-step-body {
+            padding-top: 2px;
+          }
+
+          .lp-steps p {
+            max-width: none;
           }
 
           .lp-spotlight.reverse .lp-spotlight-copy,
@@ -1497,18 +1654,9 @@ export function LandingPage() {
             max-width: none;
           }
 
-          .lp-spotlight,
-          .lp-sam {
-            padding-block: 64px;
-          }
-
           .lp-contact,
           .lp-form-row {
             grid-template-columns: 1fr;
-          }
-
-          .lp-cta {
-            padding-block: 52px;
           }
 
           .lp-foot-links {

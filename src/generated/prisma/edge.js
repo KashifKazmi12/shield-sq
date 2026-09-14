@@ -462,7 +462,7 @@ const config = {
       "value": "prisma-client-js"
     },
     "output": {
-      "value": "D:\\SQ\\New folder\\shield-sq\\src\\generated\\prisma",
+      "value": "D:\\SQ\\shield-sq\\src\\generated\\prisma",
       "fromEnvVar": null
     },
     "config": {
@@ -480,11 +480,11 @@ const config = {
       }
     ],
     "previewFeatures": [],
-    "sourceFilePath": "D:\\SQ\\New folder\\shield-sq\\prisma\\schema.prisma",
+    "sourceFilePath": "D:\\SQ\\shield-sq\\prisma\\schema.prisma",
     "isCustomOutput": true
   },
   "relativeEnvPaths": {
-    "rootEnvPath": "../../../.env",
+    "rootEnvPath": null,
     "schemaEnvPath": "../../../.env"
   },
   "relativePath": "../../../prisma",
